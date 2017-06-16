@@ -1,0 +1,204 @@
+#!/bin/bash
+# ----------------------------------------------------------------------------
+# Raspbian boot-switcher: manage Raspberry Pi multiboot system
+#
+# ----------------------------------------------------------------------------
+# Author: Bernhard Bablok
+# License: GPL3
+#
+# Website: https://github.com/bablokb/pi-boot-switch
+# ----------------------------------------------------------------------------
+
+# some constants   ------------------------------------------------------------
+
+BOOT_PART="/boot"
+BOOT_BACKUP="/_boot"
+FS_TYPE="ext4"
+
+# set defaults   --------------------------------------------------------------
+
+setDefaults() {
+  op=""          # operation
+  newRoot=""
+  verbose=""
+}
+
+# --- help   -----------------------------------------------------------------
+
+usage() {
+  local pgm=`basename $0`
+  echo -e "\n$pgm: manage Raspberry Pi multiboot system\n\
+  \nusage: `basename $0` [options]\n\
+  Possible options:\n\
+    -c          copy partition\n\
+    -f source   source partition (default: current root-partition)\n\
+                use with -c, e.g. '-f /dev/mmcblk0p2'\n\
+    -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
+    -L label    set label of target partition (also available standalone)\n\n\
+    -i image    install image to target partition\n\n\
+    -s part     switch to partition part for next boot (requires reboot)\n\
+    -S          switch to partition (use selection-dialog, requires reboot)\n\n\
+    -u part     update target partition from current root-partition\n\
+    -U          update backup of /boot on current root-partition\n\
+    -v          verbose operation\n\
+    -h          show this help\n\
+"
+  exit 3
+}
+
+# --- parse arguments and set variables   ------------------------------------
+
+parseArguments() {
+  while getopts ":ci:f:t:L:s:Su:Uvh" opt; do
+    case $opt in
+      c) op="Copy";;
+      i) srcImage="$OPTARG";;
+      f) srcPart="$OPTARG";;
+      t) targetPart="$OPTARG";;
+      L) targetLabel="$OPTARG";;
+      s) op="Switch"; newRoot="$OPTARG";;
+      S) op="SwitchSelect";;
+      u) op="UpdateTarget"; updateRoot="$OPTARG";;
+      U) op="UpdateBoot";;
+      h) usage;;
+      v) verbose="-v";;
+      ?) echo "error: illegal option: $OPTARG"
+           usage;;
+    esac
+  done
+
+  shift $((OPTIND-1))
+  dirs=("$@")
+}
+
+# --- check arguments   ------------------------------------------------------
+
+checkArguments() {
+  [ -z "$op" -a -n "$targetLabel" ] && op="Label"
+  if [ -z "$op" ]; then
+    msg "error: no operation specified"
+    exit 3
+  fi
+}
+
+# --- write message to log and stderr   --------------------------------------
+
+msg() {
+  echo -e "$1" >&2
+}
+
+# --- copy files of root-partition   -----------------------------------------
+
+copyRoot() {
+  local src="$1" dst="$2"
+  msg "copying $src to $dest"
+  rsync $verbose -a -H -A -X -S -x \
+                 --exclude=/tmp/\*\* \
+                 --exclude=/var/tmp/\*\* "$src" "$dst"
+}
+
+# --- copy files of boot-partition   -----------------------------------------
+
+copyBoot() {
+  local src="$1" dst="$2"
+  [ ! -d "$dst" ] && mkdir "$dst"
+  msg "copying $src to $dst"
+  # TODO: extra rsync-args for fat-partitions
+  rsync $verbose -a "$src" "$dst"
+}
+
+# --- restore files of boot-partition   --------------------------------------
+
+restoreBoot() {
+  local src="$1"
+  [ ! -d /boot ] && mkdir /boot
+  grep -qw "/boot" /etc/mtab && mount /boot
+  msg "restoring /boot from $src"
+  copyBoot "$src/" "/boot"
+}
+
+# --- update fstab after copy   ----------------------------------------------
+
+updateFstab() {
+  local part="$1" fstabPath="$2"
+  msg "fixing /etc/fstab on $part"
+  sed -i -e "/\W\/\W/s/^[^ \t]*/\/dev\/$part/" "$fstabPath"
+}
+
+# --- update cmdline.txt after copy   ----------------------------------------
+
+updateCmdline() {
+  local part="$1" cmdlinePath="$2"
+  msg "fixing $cmdlinePath"
+  sed -i -e "s/root=[^ ]*/root=\/dev\/$part/" "$cmdlinePath"
+}
+
+# --- get default label   ----------------------------------------------------
+
+getLabel() {
+  local ID VERSION_ID
+  eval $(grep "^ID=\|^VERSION_ID=" "$1/etc/os-release")
+  targetLabel="$ID $VERSION_ID"
+}
+
+# --- label current/target partition   ---------------------------------------
+
+doLabel() {
+  [ -z "$targetLabel" ] && return
+  if [ -n "$targetPart" ]; then
+    e2label "$targetPart" "$targetLabel"
+  else
+    e2label $(mount | grep -w / | cut -d" " -f1) "$targetLabel"    
+  fi
+}
+
+# --- copy files to target partition   ---------------------------------------
+
+doCopy() {
+  if [ -z "$targetPart" ]; then
+    msg "error: no target partition selected"
+    exit 3
+  fi
+
+  # format target partition
+  msg "info: formatting partition $targetPart with $FS_TYPE"
+  mkfs.$FS_TYPE -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+
+  # mount target partition
+  local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+  msg "info: mounting $targetPart on $mntDirTarget"
+  mount "$targetPart" "$mntDirTarget"
+
+  # copy files
+  copyRoot / "$mntDirTarget"
+
+  # fix fstab
+  updateFstab "$targetPart" "$mntDirTarget/etc/fstab"
+
+  # mount and copy /boot
+  copyBoot "/boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
+  
+  # fix /_boot/cmdline.txt
+  updateCmdline "$targetPart" "$mntDirTarget/_boot/cmdline.txt"
+
+  # if we use copy+switch, just update /boot/cmdline.txt
+  if [ -n "$newRoot" -a "$newRoot" = "$targetPart" ]; then
+    copyBoot "/boot/" "/_boot"                 # backup to current root/_boot
+    cp -a "$mntDirTarget/_boot/cmdline.txt" "/boot/cmdline.txt"
+  fi
+
+  # get label if empty
+  [ -z "targetLabel" ] && getLabel "$mntDirTarget"
+
+  # label target
+  doLabel
+}
+
+# --- main program   ---------------------------------------------------------
+
+setDefaults
+parseArguments "$@"
+checkArguments
+
+# execute operation
+eval do$op
