@@ -1,0 +1,22 @@
+#!/bin/bash
+# --------------------------------------------------------------------------
+# Boot-Switcher for Raspberry Pi multiboot systems
+#
+# This script installs all necessary files.
+#
+# Author: Bernhard Bablok
+# License: GPL3
+#
+# Website: https://github.com/bablokb/pi-boot-switch
+#
+# --------------------------------------------------------------------------
+
+# --- defaults used during installation   ----------------------------------
+
+# --- install specific files   ----------------------------------------------
+
+for f in `find $(dirname "$0")/../files/ -type f`; do
+  cp -v "$f" "${f#*files}"
+  chown root:root "${f#*files}"
+done
+chmod 744 /usr/local/sbin/pi-boot-switch
