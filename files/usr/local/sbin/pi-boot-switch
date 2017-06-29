@@ -122,7 +122,7 @@ restoreBoot() {
 updateFstab() {
   local part="$1" fstabPath="$2"
   msg "fixing /etc/fstab on $part"
-  sed -i -e "/\W\/\W/s/^[^ \t]*/\/dev\/$part/" "$fstabPath"
+  sed -i -e "/\W\/\W/s,^[^ \t]*,$part," "$fstabPath"
 }
 
 # --- update cmdline.txt after copy   ----------------------------------------
@@ -130,7 +130,7 @@ updateFstab() {
 updateCmdline() {
   local part="$1" cmdlinePath="$2"
   msg "fixing $cmdlinePath"
-  sed -i -e "s/root=[^ ]*/root=\/dev\/$part/" "$cmdlinePath"
+  sed -i -e "s,root=[^ ]*,root=$part," "$cmdlinePath"
 }
 
 # --- get default label   ----------------------------------------------------
@@ -162,7 +162,7 @@ doCopy() {
 
   # format target partition
   msg "info: formatting partition $targetPart with $FS_TYPE"
-  mkfs.$FS_TYPE -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+  mkfs.$FS_TYPE -q -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
 
   # mount target partition
   local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
@@ -176,6 +176,7 @@ doCopy() {
   updateFstab "$targetPart" "$mntDirTarget/etc/fstab"
 
   # mount and copy /boot
+  mount | grep -qw /boot || mount /boot
   copyBoot "/boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
   
   # fix /_boot/cmdline.txt
@@ -190,8 +191,43 @@ doCopy() {
   # get label if empty
   [ -z "targetLabel" ] && getLabel "$mntDirTarget"
 
+  # umount target partitition
+  umount "$mntDirTarget" && rm -fr "$mntDirTarget"
+
   # label target
   doLabel
+
+  msg "info: copied system to $targetPart"
+  if [ -z "$newRoot" ]; then
+    msg "info: use $0 with option '-s $targetPart' to boot from new partition"
+  else
+    msg "info: reboot the system to start from $newRoot"
+  fi
+}
+
+# --- switch boot-partition   ------------------------------------------------
+
+doSwitch() {
+  # mount /boot and update /_boot
+  mount | grep -qw /boot || mount /boot
+  copyBoot "/boot/" "/_boot"             # backup to current root/_boot
+
+  # remove /boot/*
+  rm -fr /boot/*
+
+  # mount new-root
+  local mntNewRoot=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+  msg "info: mounting $newRoot on $mntNewRoot"
+  mount "$newRoot" "$mntNewRoot"
+
+  # copy /new/_boot -> /boot
+  copyBoot "$mntNewRoot/_boot/" "/boot"
+
+  # umount /new
+  msg "info: unmounting $newRoot"
+  umount "$mntNewRoot"
+
+  msg "info: reboot the system to start from $newRoot"
 }
 
 # --- main program   ---------------------------------------------------------
