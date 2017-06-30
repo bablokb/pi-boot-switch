@@ -21,6 +21,7 @@ setDefaults() {
   op=""          # operation
   newRoot=""
   verbose=""
+  format=0
 }
 
 # --- help   -----------------------------------------------------------------
@@ -34,6 +35,7 @@ usage() {
     -f source   source partition (default: current root-partition)\n\
                 use with -c, e.g. '-f /dev/mmcblk0p2'\n\
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
+    -F          format target partition (recommended)\n\
     -L label    set label of target partition (also available standalone)\n\n\
     -i image    install image to target partition\n\n\
     -s part     switch to partition part for next boot (requires reboot)\n\
@@ -49,12 +51,13 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":ci:f:t:L:s:Su:Uvh" opt; do
+  while getopts ":ci:f:t:FL:s:Su:Uvh" opt; do
     case $opt in
       c) op="Copy";;
       i) srcImage="$OPTARG";;
       f) srcPart="$OPTARG";;
       t) targetPart="$OPTARG";;
+      F) format=1;;
       L) targetLabel="$OPTARG";;
       s) op="Switch"; newRoot="$OPTARG";;
       S) op="SwitchSelect";;
@@ -161,17 +164,24 @@ doCopy() {
   fi
 
   # format target partition
-  msg "info: formatting partition $targetPart with $FS_TYPE"
-  if [ -n "$verbose" ]; then
-    mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+  if [ "$format" -eq 1 ]; then
+    msg "info: formatting partition $targetPart with $FS_TYPE"
+    if [ -n "$verbose" ]; then
+      mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+    else
+      mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+    fi
   else
-    mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+    msg "warning: not formatting $targetPart!"
   fi
 
   # mount target partition
   local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
   msg "info: mounting $targetPart on $mntDirTarget"
-  mount "$targetPart" "$mntDirTarget"
+  if ! mount "$targetPart" "$mntDirTarget"; then
+    msg "error: could not mount $targetPart, aborting!"
+    exit 3
+  fi
 
   # copy files
   copyRoot / "$mntDirTarget"
