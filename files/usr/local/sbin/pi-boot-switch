@@ -19,12 +19,22 @@ REBOOT_DELAY="5"
 # set defaults   --------------------------------------------------------------
 
 setDefaults() {
-  op=""          # operation
-  newRoot=""
-  newBoot=""
+  targetDevice=""
+  rootDevice=""
+  bootDevice=""
   verbose=""
-  format=0
-  reboot=0
+  format=""
+
+  # operations
+  copy=""
+  label=""
+  newBoot=""
+  switch=""
+  switchSelect=""
+  reboot=""
+  updateRoot=""
+  updateBoot=""
+  install=""
 }
 
 # --- help   -----------------------------------------------------------------
@@ -63,18 +73,18 @@ usage() {
 parseArguments() {
   while getopts ":cf:t:FL:B:s:SRu:Ui:vh" opt; do
     case $opt in
-      c) op="Copy";;
+      c) copy=1;;
       f) srcPart="$OPTARG";;
-      t) targetPart="$OPTARG";;
+      t) targetDevice="$OPTARG";;
       F) format=1;;
-      L) targetLabel="$OPTARG";;
-      B) op="NewBoot"; newBoot="$OPTARG";;
-      s) op="Switch"; newRoot="$OPTARG";;
-      S) op="SwitchSelect";;
+      L) label=1; targetLabel="$OPTARG";;
+      B) newBoot=1; bootDevice="$OPTARG";;
+      s) switch=1; rootDevice="$OPTARG";;
+      S) switchSelect=1;;
       R) reboot=1;;
-      u) op="UpdateRoot"; updateRoot="$OPTARG";;
-      U) op="UpdateBoot";;
-      i) op="Install", srcImage="$OPTARG";;
+      u) updateRoot=1; rootDevice="$OPTARG";;
+      U) updateBoot=1;;
+      i) install=1; srcImage="$OPTARG";;
       h) usage;;
       v) verbose="-v";;
       ?) echo "error: illegal option: $OPTARG"
@@ -160,8 +170,8 @@ getLabel() {
 
 doLabel() {
   [ -z "$targetLabel" ] && return
-  if [ -n "$targetPart" ]; then
-    e2label "$targetPart" "$targetLabel"
+  if [ -n "$targetDevice" ]; then
+    e2label "$targetDevice" "$targetLabel"
   else
     e2label $(mount | grep -w / | cut -d" " -f1) "$targetLabel"    
   fi
@@ -194,28 +204,28 @@ doUpdateRoot() {
 # --- copy files to target partition   ---------------------------------------
 
 doCopy() {
-  if [ -z "$targetPart" ]; then
+  if [ -z "$targetDevice" ]; then
     msg "error: no target partition selected"
     exit 3
   fi
 
   # format target partition
-  if [ "$format" -eq 1 ]; then
-    msg "info: formatting partition $targetPart with $FS_TYPE"
+  if [ -n "$format" ]; then
+    msg "info: formatting partition $targetDevice with $FS_TYPE"
     if [ -n "$verbose" ]; then
-      mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+      mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetDevice"
     else
-      mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+      mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetDevice"
     fi
   else
-    msg "warning: not formatting $targetPart!"
+    msg "warning: not formatting $targetDevice!"
   fi
 
   # mount target partition
   local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
-  msg "info: mounting $targetPart on $mntDirTarget"
-  if ! mount "$targetPart" "$mntDirTarget"; then
-    msg "error: could not mount $targetPart, aborting!"
+  msg "info: mounting $targetDevice on $mntDirTarget"
+  if ! mount "$targetDevice" "$mntDirTarget"; then
+    msg "error: could not mount $targetDevice, aborting!"
     exit 3
   fi
 
@@ -223,36 +233,29 @@ doCopy() {
   copyRoot / "$mntDirTarget"
 
   # fix fstab
-  updateFstab "$targetPart" "$mntDirTarget/etc/fstab"
+  updateFstab "$targetDevice" "$mntDirTarget/etc/fstab"
 
   # mount and copy /boot
   mount | grep -qw /boot || mount /boot
   copyBoot "/boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
   
   # fix /_boot/cmdline.txt
-  updateCmdline "$targetPart" "$mntDirTarget/_boot/cmdline.txt"
-
-  # if we use copy+switch, just update /boot/cmdline.txt
-  if [ -n "$newRoot" -a "$newRoot" = "$targetPart" ]; then
-    copyBoot "/boot/" "/_boot"                 # backup to current root/_boot
-    msg "info: updating /boot/cmdline.txt"
-    cp -a "$mntDirTarget/_boot/cmdline.txt" "/boot/cmdline.txt"
-  fi
+  updateCmdline "$targetDevice" "$mntDirTarget/_boot/cmdline.txt"
 
   # get label if empty
-  [ -z "$targetLabel" ] && getLabel "$mntDirTarget"
+  if [ -z "$targetLabel" ]; then
+    getLabel "$mntDirTarget"
+    label=1                      # force labelling
+  fi
 
   # umount target partitition
   umount "$mntDirTarget" && rm -fr "$mntDirTarget"
 
-  # label target
-  doLabel
-
-  msg "info: copied system to $targetPart"
-  if [ -z "$newRoot" ]; then
-    msg "info: use $0 with option '-s $targetPart' to boot from new partition"
+  msg "info: copied system to $targetDevice"
+  if [ -z "$switch" -a -z "$switchSelect" ]; then
+    msg "info: use $0 with option '-s $targetDevice' to boot from new partition"
   else
-    msg "info: reboot the system to start from $newRoot"
+    msg "info: reboot the system to start from $rootDevice"
   fi
 }
 
@@ -265,35 +268,34 @@ doSwitch() {
 
   # mount new-root
   local mntNewRoot=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
-  msg "info: mounting $newRoot on $mntNewRoot"
-  if ! mount "$newRoot" "$mntNewRoot"; then
-    msg "error: could not mount $newRoot, aborting!"
+  msg "info: mounting $rootDevice on $mntNewRoot"
+  if ! mount "$rootDevice" "$mntNewRoot"; then
+    msg "error: could not mount $rootDevice, aborting!"
     exit 3
   fi
 
   if [ ! -d "$mntNewRoot/_boot/" ]; then
-    msg "error: $newRoot has no /_boot directory, aborting!"
+    msg "error: $rootDevice has no /_boot directory, aborting!"
     umount "$mntNewRoot" && rm -fr "$mntNewRoot"
     exit 3
   fi
-
-  # remove /boot/*
-  rm -fr /boot/*
 
   # copy /new/_boot -> /boot
   copyBoot "$mntNewRoot/_boot/" "/boot"
 
   # umount /new
-  msg "info: unmounting $newRoot"
+  msg "info: unmounting $rootDevice"
   umount "$mntNewRoot" && rm -fr "$mntNewRoot"
 
-  if [ "$reboot" -eq 0 ]; then
-    msg "info: reboot the system to start from $newRoot"
-  else
-    msg "info: rebooting the system in $REBOOT_DELAY seconds"
-    sleep "$REBOOT_DELAY"
-    shutdown -r &
-  fi
+  msg "info: reboot the system to start from $rootDevice"
+}
+
+# --- reboot the system   ----------------------------------------------------
+
+doReboot() {
+  msg "info: rebooting the system in $REBOOT_DELAY seconds"
+  sleep "$REBOOT_DELAY"
+  shutdown -r &
 }
 
 # --- main program   ---------------------------------------------------------
@@ -302,5 +304,19 @@ setDefaults
 parseArguments "$@"
 checkArguments
 
-# execute operation
-eval do$op
+# execute operation(s)
+
+if [ -n "$install" ]; then
+  doInstall
+elif [ -n "$updateRoot" ]; then
+  doUpdateRoot
+elif [ -n "$updateBoot" ]; then
+  doUpdateBoot
+else
+  # preserve order of execution
+  [ -n "$copy" ]                       && doCopy
+  [ -n "$switch" -o n "$switchSelect"] && doSwitch
+  [ -n "$newBoot" ]                    && doNewBoot
+  [ -n "$label" ]                      && doLabel
+  [ -n "$reboot" ]                     && doReboot
+fi
