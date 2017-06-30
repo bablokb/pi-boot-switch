@@ -189,11 +189,12 @@ doCopy() {
   # if we use copy+switch, just update /boot/cmdline.txt
   if [ -n "$newRoot" -a "$newRoot" = "$targetPart" ]; then
     copyBoot "/boot/" "/_boot"                 # backup to current root/_boot
+    msg "info: updating /boot/cmdline.txt"
     cp -a "$mntDirTarget/_boot/cmdline.txt" "/boot/cmdline.txt"
   fi
 
   # get label if empty
-  [ -z "targetLabel" ] && getLabel "$mntDirTarget"
+  [ -z "$targetLabel" ] && getLabel "$mntDirTarget"
 
   # umount target partitition
   umount "$mntDirTarget" && rm -fr "$mntDirTarget"
