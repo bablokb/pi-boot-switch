@@ -21,6 +21,7 @@ REBOOT_DELAY="5"
 setDefaults() {
   op=""          # operation
   newRoot=""
+  newBoot=""
   verbose=""
   format=0
   reboot=0
@@ -38,13 +39,19 @@ usage() {
                 use with -c, e.g. '-f /dev/mmcblk0p2'\n\
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
     -F          format target partition (recommended)\n\
-    -L label    set label of target partition (also available standalone)\n\n\
+    -L label    set label of target partition (also available standalone)
+
+    -B part     copy /boot to partition part and set part as new /boot
+
     -s part     switch to partition part for next boot (requires reboot)\n\
     -S          switch to partition (use selection-dialog, requires reboot)\n\
-    -R          reboot immediately after switching\n\n\
+    -R          reboot immediately after switching
+
     -u part     update target partition from current root-partition\n\
-    -U          update backup of /boot on current root-partition\n\n\
-    -i image    install image to target partition\n\n\
+    -U          update backup of /boot on current root-partition
+
+    -i image    install image to target partition
+
     -v          verbose operation\n\
     -h          show this help\n\
 "
@@ -54,18 +61,20 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":ci:f:t:FL:s:Su:Uvh" opt; do
+  while getopts ":cf:t:FL:B:s:SRu:Ui:vh" opt; do
     case $opt in
       c) op="Copy";;
-      i) srcImage="$OPTARG";;
       f) srcPart="$OPTARG";;
       t) targetPart="$OPTARG";;
       F) format=1;;
       L) targetLabel="$OPTARG";;
+      B) op="NewBoot"; newBoot="$OPTARG";;
       s) op="Switch"; newRoot="$OPTARG";;
       S) op="SwitchSelect";;
-      u) op="UpdateTarget"; updateRoot="$OPTARG";;
+      R) reboot=1;;
+      u) op="UpdateRoot"; updateRoot="$OPTARG";;
       U) op="UpdateBoot";;
+      i) op="Install", srcImage="$OPTARG";;
       h) usage;;
       v) verbose="-v";;
       ?) echo "error: illegal option: $OPTARG"
@@ -156,6 +165,30 @@ doLabel() {
   else
     e2label $(mount | grep -w / | cut -d" " -f1) "$targetLabel"    
   fi
+}
+
+# --- create and configure new boot-partition   ------------------------------
+
+doNewBoot() {
+  msg "info: sorry, not implemented yet!"
+}
+
+# --- install an image to a partition   --------------------------------------
+
+doInstall() {
+  msg "info: sorry, not implemented yet!"
+}
+
+# --- update boot-partition   ------------------------------------------------
+
+doUpdateBoot() {
+  msg "info: sorry, not implemented yet!"
+}
+
+# --- update root-partition   ------------------------------------------------
+
+doUpdateRoot() {
+  msg "info: sorry, not implemented yet!"
 }
 
 # --- copy files to target partition   ---------------------------------------
