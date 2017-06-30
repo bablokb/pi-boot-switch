@@ -91,7 +91,7 @@ msg() {
 
 copyRoot() {
   local src="$1" dst="$2"
-  msg "copying $src to $dest"
+  msg "copying $src to $dst"
   rsync $verbose -a -H -A -X -S -x \
                  --exclude=/tmp/\*\* \
                  --exclude=/var/tmp/\*\* "$src" "$dst"
@@ -162,7 +162,11 @@ doCopy() {
 
   # format target partition
   msg "info: formatting partition $targetPart with $FS_TYPE"
-  mkfs.$FS_TYPE -q -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+  if [ -n "$verbose" ]; then
+    mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+  else
+    mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetPart"
+  fi
 
   # mount target partition
   local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
@@ -212,20 +216,29 @@ doSwitch() {
   mount | grep -qw /boot || mount /boot
   copyBoot "/boot/" "/_boot"             # backup to current root/_boot
 
-  # remove /boot/*
-  rm -fr /boot/*
-
   # mount new-root
   local mntNewRoot=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
   msg "info: mounting $newRoot on $mntNewRoot"
-  mount "$newRoot" "$mntNewRoot"
+  if ! mount "$newRoot" "$mntNewRoot"; then
+    msg "error: could not mount $newRoot, aborting!"
+    exit 3
+  fi
+
+  if [ ! -d "$mntNewRoot/_boot/" ]; then
+    msg "error: $newRoot has no /_boot directory, aborting!"
+    umount "$mntNewRoot" && rm -fr "$mntNewRoot"
+    exit 3
+  fi
+
+  # remove /boot/*
+  rm -fr /boot/*
 
   # copy /new/_boot -> /boot
   copyBoot "$mntNewRoot/_boot/" "/boot"
 
   # umount /new
   msg "info: unmounting $newRoot"
-  umount "$mntNewRoot"
+  umount "$mntNewRoot" && rm -fr "$mntNewRoot"
 
   msg "info: reboot the system to start from $newRoot"
 }
