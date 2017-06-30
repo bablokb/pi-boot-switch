@@ -14,6 +14,7 @@
 BOOT_PART="/boot"
 BOOT_BACKUP="/_boot"
 FS_TYPE="ext4"
+REBOOT_DELAY="5"
 
 # set defaults   --------------------------------------------------------------
 
@@ -22,6 +23,7 @@ setDefaults() {
   newRoot=""
   verbose=""
   format=0
+  reboot=0
 }
 
 # --- help   -----------------------------------------------------------------
@@ -37,11 +39,12 @@ usage() {
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
     -F          format target partition (recommended)\n\
     -L label    set label of target partition (also available standalone)\n\n\
-    -i image    install image to target partition\n\n\
     -s part     switch to partition part for next boot (requires reboot)\n\
-    -S          switch to partition (use selection-dialog, requires reboot)\n\n\
+    -S          switch to partition (use selection-dialog, requires reboot)\n\
+    -R          reboot immediately after switching\n\n\
     -u part     update target partition from current root-partition\n\
-    -U          update backup of /boot on current root-partition\n\
+    -U          update backup of /boot on current root-partition\n\n\
+    -i image    install image to target partition\n\n\
     -v          verbose operation\n\
     -h          show this help\n\
 "
@@ -251,7 +254,13 @@ doSwitch() {
   msg "info: unmounting $newRoot"
   umount "$mntNewRoot" && rm -fr "$mntNewRoot"
 
-  msg "info: reboot the system to start from $newRoot"
+  if [ "$reboot" -eq 0 ]; then
+    msg "info: reboot the system to start from $newRoot"
+  else
+    msg "info: rebooting the system in $REBOOT_DELAY seconds"
+    sleep "$REBOOT_DELAY"
+    shutdown -r &
+  fi
 }
 
 # --- main program   ---------------------------------------------------------
