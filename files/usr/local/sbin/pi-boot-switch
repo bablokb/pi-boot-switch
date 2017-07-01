@@ -339,7 +339,7 @@ doSwitch() {
 doReboot() {
   msg "info: rebooting the system in $REBOOT_DELAY seconds"
   sleep "$REBOOT_DELAY"
-  shutdown -r &
+  shutdown -r now &
 }
 
 # --- main program   ---------------------------------------------------------
