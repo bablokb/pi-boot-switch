@@ -26,6 +26,7 @@ setDefaults() {
   format=""
 
   # operations
+  info=""
   copy=""
   label=""
   newBoot=""
@@ -43,7 +44,9 @@ usage() {
   local pgm=`basename $0`
   echo -e "\n$pgm: manage Raspberry Pi multiboot system\n\
   \nusage: `basename $0` [options]\n\
-  Possible options:\n\
+  Possible options:\n\n\
+    -I          show partition info
+
     -c          copy partition\n\
     -f source   source partition (default: current root-partition)\n\
                 use with -c, e.g. '-f /dev/mmcblk0p2'\n\
@@ -71,8 +74,9 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":cf:t:FL:B:s:SRu:Ui:vh" opt; do
+  while getopts ":Icf:t:FL:B:s:SRu:Ui:vh" opt; do
     case $opt in
+      I) info=1;;
       c) copy=1;;
       f) srcPart="$OPTARG";;
       t) targetDevice="$OPTARG";;
@@ -99,11 +103,11 @@ parseArguments() {
 # --- check arguments   ------------------------------------------------------
 
 checkArguments() {
-  [ -z "$op" -a -n "$targetLabel" ] && op="Label"
-  if [ -z "$op" ]; then
-    msg "error: no operation specified"
-    exit 3
-  fi
+ :
+#  if [ -z "$op" ]; then
+#    msg "error: no operation specified"
+#    exit 3
+#  fi
 }
 
 # --- write message to log and stderr   --------------------------------------
@@ -137,7 +141,7 @@ copyBoot() {
 restoreBoot() {
   local src="$1"
   [ ! -d /boot ] && mkdir /boot
-  grep -qw "/boot" /etc/mtab && mount /boot
+  grep -qw "/boot" /etc/mtab || mount /boot
   msg "restoring /boot from $src"
   copyBoot "$src/" "/boot"
 }
@@ -164,6 +168,43 @@ getLabel() {
   local ID VERSION_ID
   eval $(grep "^ID=\|^VERSION_ID=" "$1/etc/os-release")
   targetLabel="$ID $VERSION_ID"
+}
+
+# --- show partition information   -------------------------------------------
+
+doInfo() {
+  grep -qw "/boot" /etc/mtab || mount /boot
+  declare -A role
+
+  # fetch current roles of partitions
+  local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
+  local currentBoot=$(mount | grep -w /boot | cut -f1 -d" ")
+  local nextRoot=$(sed -e 's/.*root=\([^ ]*\) .*$/\1/' /boot/cmdline.txt)
+
+  role[$currentRoot]="current root"
+  if [ -n "${role[$nextRoot]}" ]; then
+    role[$nextRoot]+=" / next root"
+  else
+    role[$nextRoot]="next root"
+  fi
+  role[$currentBoot]="current boot"
+
+  # check all partitions and print label and role
+
+  echo "Partition       | Label            | Role"
+  echo "----------------|------------------|---------------------"
+
+  local part label rest
+  ( while read part rest; do
+    if grep -qw LABEL <<< "$rest"; then
+      label=$(sed -e 's/LABEL="\([^"]*\)".*/\1/' <<< "$rest")
+    else
+      label=""
+    fi
+    part="${part%:}"
+    printf "%-15s | %-16s | %-s\n" "$part" "$label" "${role[$part]}"
+  done < <( blkid | grep PARTUUID)
+  ) | sort
 }
 
 # --- label current/target partition   ---------------------------------------
@@ -306,7 +347,9 @@ checkArguments
 
 # execute operation(s)
 
-if [ -n "$install" ]; then
+if [ -n "$info" ]; then
+  doInfo
+elif [ -n "$install" ]; then
   doInstall
 elif [ -n "$updateRoot" ]; then
   doUpdateRoot
