@@ -211,11 +211,14 @@ doInfo() {
 
 doLabel() {
   [ -z "$targetLabel" ] && return
+  local device
   if [ -n "$targetDevice" ]; then
-    e2label "$targetDevice" "$targetLabel"
+    device="$targetDevice"
   else
-    e2label $(mount | grep -w / | cut -d" " -f1) "$targetLabel"    
+    device=$(mount | grep -w / | cut -d" " -f1)
   fi
+  msg "info: setting label for $device: $targetLabel"
+  e2label "$device" "$targetLabel"
 }
 
 # --- create and configure new boot-partition   ------------------------------
@@ -357,9 +360,9 @@ elif [ -n "$updateBoot" ]; then
   doUpdateBoot
 else
   # preserve order of execution
-  [ -n "$copy" ]                       && doCopy
-  [ -n "$switch" -o n "$switchSelect"] && doSwitch
-  [ -n "$newBoot" ]                    && doNewBoot
-  [ -n "$label" ]                      && doLabel
-  [ -n "$reboot" ]                     && doReboot
+  [ -n "$copy" ]                         && doCopy
+  [ -n "$switch" -o -n "$switchSelect" ] && doSwitch
+  [ -n "$newBoot" ]                      && doNewBoot
+  [ -n "$label" ]                        && doLabel
+  [ -n "$reboot" ]                       && doReboot
 fi
