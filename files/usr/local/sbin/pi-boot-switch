@@ -124,7 +124,7 @@ msg() {
 copyRoot() {
   local src="$1" dst="$2"
   msg "copying $src to $dst"
-  rsync $verbose -a -H -A -X -S -x \
+  rsync $verbose -a -H -A -X -S -x --delete \
                  --exclude=/tmp/\*\* \
                  --exclude=/var/tmp/\*\* "$src" "$dst"
 }
@@ -135,8 +135,7 @@ copyBoot() {
   local src="$1" dst="$2"
   [ ! -d "$dst" ] && mkdir "$dst"
   msg "copying $src to $dst"
-  # TODO: extra rsync-args for fat-partitions
-  rsync $verbose -a "$src" "$dst"
+  rsync $verbose -a --delete --no-owner --no-group --modify-window=2 "$src" "$dst"
 }
 
 # --- restore files of boot-partition   --------------------------------------
@@ -183,6 +182,9 @@ doInfo() {
   local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
   local currentBoot=$(mount | grep -w /boot | cut -f1 -d" ")
   local nextRoot=$(sed -e 's/.*root=\([^ ]*\) .*$/\1/' /boot/cmdline.txt)
+  if grep -q PARTUUID <<< "$nextRoot"; then
+    nextRoot=$(blkid -l -t "$nextRoot" | cut -f1 -d":")
+  fi
 
   role[$currentRoot]="current root"
   if [ -n "${role[$nextRoot]}" ]; then
