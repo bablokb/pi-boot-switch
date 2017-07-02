@@ -103,11 +103,14 @@ parseArguments() {
 # --- check arguments   ------------------------------------------------------
 
 checkArguments() {
- :
-#  if [ -z "$op" ]; then
-#    msg "error: no operation specified"
-#    exit 3
-#  fi
+ [ -n "$targetDevice" ] && \
+   [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
+
+ [ -n "$bootDevice" ] && \
+   [ "${bootDevice:0:4}" != "/dev" ] && bootDevice="/dev/$bootDevice"
+
+ [ -n "$rootDevice" ] && \
+   [ "${rootDevice:0:4}" != "/dev" ] && rootDevice="/dev/$rootDevice"
 }
 
 # --- write message to log and stderr   --------------------------------------
