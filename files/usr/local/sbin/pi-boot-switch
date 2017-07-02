@@ -33,8 +33,6 @@ setDefaults() {
   switch=""
   switchSelect=""
   reboot=""
-  updateRoot=""
-  updateBoot=""
   install=""
 }
 
@@ -60,9 +58,6 @@ usage() {
     -S          switch to partition (use selection-dialog, requires reboot)\n\
     -R          reboot immediately after switching
 
-    -u part     update target partition from current root-partition\n\
-    -U          update backup of /boot on current root-partition
-
     -i image    install image to target partition
 
     -v          verbose operation\n\
@@ -74,7 +69,7 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Icf:t:FL:B:s:SRu:Ui:vh" opt; do
+  while getopts ":Icf:t:FL:B:s:SRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
@@ -89,8 +84,8 @@ parseArguments() {
       u) updateRoot=1; rootDevice="$OPTARG";;
       U) updateBoot=1;;
       i) install=1; srcImage="$OPTARG";;
-      h) usage;;
       v) verbose="-v";;
+      h) usage;;
       ?) echo "error: illegal option: $OPTARG"
            usage;;
     esac
@@ -382,10 +377,6 @@ if [ -n "$info" ]; then
   doInfo
 elif [ -n "$install" ]; then
   doInstall
-elif [ -n "$updateRoot" ]; then
-  doUpdateRoot
-elif [ -n "$updateBoot" ]; then
-  doUpdateBoot
 else
   # preserve order of execution
   [ -n "$copy" ]                         && doCopy
