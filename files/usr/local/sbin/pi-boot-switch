@@ -256,18 +256,6 @@ doInstall() {
   msg "info: sorry, not implemented yet!"
 }
 
-# --- update boot-partition   ------------------------------------------------
-
-doUpdateBoot() {
-  msg "info: sorry, not implemented yet!"
-}
-
-# --- update root-partition   ------------------------------------------------
-
-doUpdateRoot() {
-  msg "info: sorry, not implemented yet!"
-}
-
 # --- copy files to target partition   ---------------------------------------
 
 doCopy() {
