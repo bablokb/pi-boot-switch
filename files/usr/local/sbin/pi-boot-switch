@@ -229,7 +229,30 @@ doLabel() {
 # --- create and configure new boot-partition   ------------------------------
 
 doNewBoot() {
-  msg "info: sorry, not implemented yet!"
+  if [ -n "$bootDevice" ]; then
+    msg "error: no boot device specified"
+    exit 3
+  elif [ ! -b "$bootDevice" ]; then
+    msg "error: $bootDevice is no block device"
+    exit 3
+  fi
+
+  # mount new boot partition
+  local mntNewBoot=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+  msg "info: mounting $bootDevice on $mntNewBoot"
+  if ! mount "$bootDevice" "$mntNewBoot"; then
+    msg "error: could not mount $bootDevice, aborting!"
+    rm -fr "$mntNewBoot"
+    exit 3
+  fi
+
+  # mount and copy /boot
+  mount | grep -qw /boot || mount /boot
+  copyBoot "/boot/" "$mntNewBoot"          # copy to new boot
+
+  umount "$mntNewBoot" && rm -fr "$mntNewBoot"
+  e2label "$bootDevice" "boot"
+  msg "info: activate USB-boot to and remove SD-card to boot from $bootDevice"
 }
 
 # --- install an image to a partition   --------------------------------------
