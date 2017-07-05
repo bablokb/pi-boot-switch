@@ -31,7 +31,6 @@ setDefaults() {
   label=""
   newBoot=""
   switch=""
-  switchSelect=""
   reboot=""
   install=""
 }
@@ -45,17 +44,17 @@ usage() {
   Possible options:\n\n\
     -I          show partition info
 
-    -c          copy partition\n\
+    -c          copy partition (select target with -t)\n\
     -f source   source partition (default: current root-partition)\n\
                 use with -c, e.g. '-f /dev/mmcblk0p2'\n\
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
-    -F          format target partition (recommended)\n\
+    -F          format target partition\n\
     -L label    set label of target partition (also available standalone)
 
     -B part     copy /boot to partition part and set part as new /boot
 
-    -s part     switch to partition part for next boot (requires reboot)\n\
-    -S          switch to partition (use selection-dialog, requires reboot)\n\
+    -s          switch to partition dest for next boot (requires reboot)\n\
+                (select target with -t)\n\
     -R          reboot immediately after switching
 
     -i image    install image to target partition
@@ -69,7 +68,7 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Icf:t:FL:B:s:SRi:vh" opt; do
+  while getopts ":Icf:t:FL:B:sRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
@@ -78,8 +77,7 @@ parseArguments() {
       F) format=1;;
       L) label=1; targetLabel="$OPTARG";;
       B) newBoot=1; bootDevice="$OPTARG";;
-      s) switch=1; rootDevice="$OPTARG";;
-      S) switchSelect=1;;
+      s) switch=1;;
       R) reboot=1;;
       u) updateRoot=1; rootDevice="$OPTARG";;
       U) updateBoot=1;;
@@ -232,6 +230,14 @@ doNewBoot() {
     exit 3
   fi
 
+  # format partition
+  if [ -n "$format" ]; then
+    msg "info: formatting partition $bootDevice with Fat32"
+    mkfs.fat $verbose -F 32 -n "boot" "$bootDevice"
+  else
+    msg "warning: not formatting $targetDevice!"
+  fi
+
   # mount new boot partition
   local mntNewBoot=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
   msg "info: mounting $bootDevice on $mntNewBoot"
@@ -246,7 +252,11 @@ doNewBoot() {
   copyBoot "/boot/" "$mntNewBoot"          # copy to new boot
 
   umount "$mntNewBoot" && rm -fr "$mntNewBoot"
-  e2label "$bootDevice" "boot"
+  if type -p fatlabel > /dev/null; then
+    fatlabel "$bootDevice" "boot"
+  else
+    msg "warning: could not label $bootDevice - please install fatlabel"
+  fi
   msg "info: activate USB-boot to and remove SD-card to boot from $bootDevice"
 }
 
@@ -314,9 +324,69 @@ doCopy() {
   fi
 }
 
+# --- query new root device from user   --------------------------------------
+
+getNewRootDevice() {
+  :
+  # scan partitions for _boot
+  # build list with partition / label
+  # present select dialog
+
+  # create temporary mountpoint
+  local tmpMnt=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+
+  # we only take partitions with label into account
+  local part label rest
+  declare -a opts
+  while read part rest; do
+    part="${part%:}"
+    msg "info: testing $part ..."
+    if ! mount -o ro "$part" "$tmpMnt"; then
+      msg "info: could not mount $part: ignoring"
+      continue
+    fi
+    if [ -d "$tmpMnt/_boot" ]; then
+      label=$(sed -e 's/LABEL="\([^"]*\)".*/\1/' <<< "$rest")
+      opts+=("$part: $label")
+      msg "info: fount _boot, adding $part to options"
+    else
+      msg "info: $part not a candidate partition"
+    fi
+    umount "$tmpMnt"
+  done < <( blkid | grep "LABEL" | sort )
+
+  # cleamup temporary mountpoint
+  grep -qw "$tmpMnt" && rm -fr "$tmpMnt"
+
+  if [ -z "${opts[@]}"; then
+    msg "info: no valid partitions available"
+    exit 3
+  else
+    opts+=("quit")
+  fi
+
+  # present selection list
+  local device
+  select device in "${opts[@]}"; do
+    [ -z "$device" ] && continue
+    if [ "$device" = "quit" ]; then
+      msg "info: aborting switch"
+      exit 0
+    else
+      break
+    fi
+  done
+
+  # extract device
+  targetDevice="${device%%:*}"
+}
+
 # --- switch boot-partition   ------------------------------------------------
 
 doSwitch() {
+  [ -n "$targetDevice" ] && getNewRootDevice
+  local rootDevice="$targetDevice"
+
   # mount /boot and update /_boot
   mount | grep -qw /boot || mount /boot
   copyBoot "/boot/" "/_boot"             # backup to current root/_boot
@@ -367,9 +437,9 @@ elif [ -n "$install" ]; then
   doInstall
 else
   # preserve order of execution
-  [ -n "$copy" ]                         && doCopy
-  [ -n "$switch" -o -n "$switchSelect" ] && doSwitch
-  [ -n "$newBoot" ]                      && doNewBoot
-  [ -n "$label" ]                        && doLabel
-  [ -n "$reboot" ]                       && doReboot
+  [ -n "$copy" ]       && doCopy
+  [ -n "$switch" ]     && doSwitch
+  [ -n "$newBoot" ]    && doNewBoot
+  [ -n "$label" ]      && doLabel
+  [ -n "$reboot" ]     && doReboot
 fi
