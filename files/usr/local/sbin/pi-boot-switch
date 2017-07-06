@@ -24,6 +24,7 @@ setDefaults() {
   bootDevice=""
   verbose=""
   format=""
+  isSD=""
 
   # operations
   info=""
@@ -48,6 +49,7 @@ usage() {
     -f source   source partition (default: current root-partition)\n\
                 use with -c, e.g. '-f /dev/mmcblk0p2'\n\
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
+    -S          target partition is on a SD-card, not an usb-device\n\
     -F          format target partition\n\
     -L label    set label of target partition (also available standalone)
 
@@ -68,12 +70,13 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Icf:t:FL:B:sRi:vh" opt; do
+  while getopts ":Icf:t:SFL:B:sRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
       f) srcPart="$OPTARG";;
       t) targetDevice="$OPTARG";;
+      S) isSD=1;;
       F) format=1;;
       L) label=1; targetLabel="$OPTARG";;
       B) newBoot=1; bootDevice="$OPTARG";;
@@ -318,14 +321,22 @@ doCopy() {
   copyRoot / "$mntDirTarget"
 
   # fix fstab
-  updateFstab "$targetDevice" "$mntDirTarget/etc/fstab"
+  if [ -z "$isSD" ]; then
+    updateFstab "$targetDevice" "$mntDirTarget/etc/fstab"
+  else
+    updateFstab "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/etc/fstab"
+  fi
 
   # mount and copy /boot
   mount | grep -qw /boot || mount /boot
   copyBoot "/boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
   
   # fix /_boot/cmdline.txt
-  updateCmdline "$targetDevice" "$mntDirTarget/_boot/cmdline.txt"
+  if [ -z "$isSD" ]; then
+    updateCmdline "$targetDevice" "$mntDirTarget/_boot/cmdline.txt"
+  else
+    updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/cmdline.txt"
+  fi
 
   # get label if empty
   if [ -z "$targetLabel" ]; then
