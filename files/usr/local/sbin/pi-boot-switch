@@ -288,6 +288,12 @@ doCopy() {
     exit 3
   fi
 
+  # add sanity check
+  if mount | grep -qw "$targetDevice"; then
+    msg "error: $targetPartition is mounted. Cowardly refusing to continue"
+    exit 3
+  fi
+
   # format target partition
   if [ -n "$format" ]; then
     msg "info: formatting partition $targetDevice with $FS_TYPE"
