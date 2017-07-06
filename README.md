@@ -62,17 +62,17 @@ For a short help just run
     
         -I          show partition info
     
-        -c          copy partition
+        -c          copy partition (select target with -t)
         -f source   source partition (default: current root-partition)
                     use with -c, e.g. '-f /dev/mmcblk0p2'
-        -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')
-        -F          format target partition (recommended)
+        -t dest     target partition (required for -i, -c or -s, e.g. '-t /dev/sdc')
+        -F          format target partition
         -L label    set label of target partition (also available standalone)
     
         -B part     copy /boot to partition part and set part as new /boot
     
-        -s part     switch to partition part for next boot (requires reboot)
-        -S          switch to partition (use selection-dialog, requires reboot)
+        -s          switch to partition dest for next boot (requires reboot)
+                    (select target with -t)
         -R          reboot immediately after switching
     
         -i image    install image to target partition
