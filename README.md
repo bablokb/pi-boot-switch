@@ -48,8 +48,10 @@ Documentation
 -------------
 
 Besides the tutorial in
-[doc/simple-usage.md] (./doc/simple-usage.md "simple usage") there is no
-extensive documentation, as all the options should be self-explantory.
+[doc/simple-usage.md] (./doc/simple-usage.md "simple usage") there is
+currently no extensive documentation. Options not covered in the tutorial
+are either not yet implemented, or for special use. Please check the
+code before using them.
 
 For a short help just run
 
@@ -66,6 +68,7 @@ For a short help just run
         -f source   source partition (default: current root-partition)
                     use with -c, e.g. '-f /dev/mmcblk0p2'
         -t dest     target partition (required for -i, -c or -s, e.g. '-t /dev/sdc')
+        -S          target partition is on a SD-card, not an usb-device
         -F          format target partition
         -L label    set label of target partition (also available standalone)
     
