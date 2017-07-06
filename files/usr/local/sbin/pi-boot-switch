@@ -215,8 +215,22 @@ doLabel() {
   else
     device=$(mount | grep -w / | cut -d" " -f1)
   fi
+
+  # query filesystem type
+  local fstype=$(mount | grep -w "$device" | cut -f5 -d" ")
+
   msg "info: setting label for $device: $targetLabel"
-  e2label "$device" "$targetLabel"
+  if [ "${fstype,,}" =~ ext.* ]; then
+    e2label "$device" "$targetLabel"
+  elif [ "${fstype,,}" = "vfat" ]; then
+    if type -p fatlabel > /dev/null; then
+      fatlabel "$device" "targetLabel"
+    else
+      msg "warning: could not label $device - please install fatlabel"
+    fi
+  else
+    msg "warning: could not label $device - unsupported filesystem type"
+  fi
 }
 
 # --- create and configure new boot-partition   ------------------------------
