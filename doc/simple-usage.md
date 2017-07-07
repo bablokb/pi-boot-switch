@@ -32,8 +32,7 @@ Note that you don't need to format the partitions, `pi-boot-switch`
 can do this for you.
 
 If you also want to boot from your usb-device, you should also prepare
-*usb boot* following [this guide]
-(https://www.raspberrypi.org/documentation/hardware/raspberrypi/bootmodes/msd.md
+*usb boot* following [this guide](https://www.raspberrypi.org/documentation/hardware/raspberrypi/bootmodes/msd.md
 "USB boot").
 
 Personally I don't use usb boot, because it slows down the boot-process and
