@@ -53,7 +53,7 @@ usage() {
     -F          format target partition\n\
     -L label    set label of target partition (also available standalone)
 
-    -B part     copy /boot to partition part and set part as new /boot
+    -B          copy /boot to partition dest and set dest as new /boot
 
     -s          switch to partition dest for next boot (requires reboot)\n\
                 (select target with -t)\n\
@@ -70,7 +70,7 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Icf:t:SFL:B:sRi:vh" opt; do
+  while getopts ":Icf:t:SFL:BsRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
@@ -79,7 +79,7 @@ parseArguments() {
       S) isSD=1;;
       F) format=1;;
       L) label=1; targetLabel="$OPTARG";;
-      B) newBoot=1; bootDevice="$OPTARG";;
+      B) newBoot=1;;
       s) switch=1;;
       R) reboot=1;;
       u) updateRoot=1; rootDevice="$OPTARG";;
@@ -101,12 +101,6 @@ parseArguments() {
 checkArguments() {
  [ -n "$targetDevice" ] && \
    [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
-
- [ -n "$bootDevice" ] && \
-   [ "${bootDevice:0:4}" != "/dev" ] && bootDevice="/dev/$bootDevice"
-
- [ -n "$rootDevice" ] && \
-   [ "${rootDevice:0:4}" != "/dev" ] && rootDevice="/dev/$rootDevice"
 }
 
 # --- write message to log and stderr   --------------------------------------
@@ -119,7 +113,7 @@ msg() {
 
 copyRoot() {
   local src="$1" dst="$2"
-  msg "copying $src to $dst"
+  msg "info: copying $src to $dst"
   rsync $verbose -a -H -A -X -S -x --delete \
                  --exclude=/tmp/\*\* \
                  --exclude=/var/tmp/\*\* "$src" "$dst"
@@ -130,7 +124,7 @@ copyRoot() {
 copyBoot() {
   local src="$1" dst="$2"
   [ ! -d "$dst" ] && mkdir "$dst"
-  msg "copying $src to $dst"
+  msg "info: copying $src to $dst"
   rsync $verbose -a --delete --no-owner --no-group --modify-window=2 "$src" "$dst"
 }
 
@@ -140,7 +134,7 @@ restoreBoot() {
   local src="$1"
   [ ! -d /boot ] && mkdir /boot
   grep -qw "/boot" /etc/mtab || mount /boot
-  msg "restoring /boot from $src"
+  msg "info: restoring /boot from $src"
   copyBoot "$src/" "/boot"
 }
 
@@ -148,7 +142,7 @@ restoreBoot() {
 
 updateFstab() {
   local part="$1" fstabPath="$2"
-  msg "fixing /etc/fstab on $part"
+  msg "info: fixing /etc/fstab on $part"
   sed -i -e "/\W\/\W/s,^[^ \t]*,$part," "$fstabPath"
 }
 
@@ -156,7 +150,7 @@ updateFstab() {
 
 updateCmdline() {
   local part="$1" cmdlinePath="$2"
-  msg "fixing $cmdlinePath"
+  msg "info: fixing $cmdlinePath"
   sed -i -e "s,root=[^ ]*,root=$part," "$cmdlinePath"
 }
 
@@ -220,14 +214,20 @@ doLabel() {
   fi
 
   # query filesystem type
-  local fstype=$(mount | grep -w "$device" | cut -f5 -d" ")
+  local fstype=$(blkid | \
+    sed -ne "/${device:5}/s/.*TYPE=\"\([^\"]*\).*/\1/p")
+
+  if [ -z "$fstype" ]; then
+    msg "error: $device has no filesystem"
+    return
+  fi
 
   msg "info: setting label for $device: $targetLabel"
-  if [ "${fstype,,}" =~ ext.* ]; then
+  if [[ "${fstype,,}" =~ ext.* ]]; then
     e2label "$device" "$targetLabel"
   elif [ "${fstype,,}" = "vfat" ]; then
     if type -p fatlabel > /dev/null; then
-      fatlabel "$device" "targetLabel"
+      fatlabel "$device" "$targetLabel"
     else
       msg "warning: could not label $device - please install fatlabel"
     fi
@@ -236,11 +236,47 @@ doLabel() {
   fi
 }
 
+# --- fix /etc/fstab on all root-devices   -----------------------------------
+
+fixAllFstab() {
+  # fix current root partition
+  local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
+  msg "info: fixing /boot in /etc/fstab on current root-partition $part"
+  sed -i -e "/\W\/boot\W/s,^[^ \t]*,$bootDevice," "/etc/fstab"
+
+  # create temporary mountpoint
+  local tmpMnt=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+
+  # we only take partitions with label into account
+  local part rest
+  while read part rest; do
+    part="${part%:}"
+    [ "$part" = "$currentRoot" ] && continue
+
+    msg "info: testing $part ..."
+    if ! mount "$part" "$tmpMnt"; then
+      msg "info: could not mount $part: ignoring"
+      continue
+    fi
+    if [ -d "$tmpMnt/_boot" ]; then
+      msg "info: found _boot, fixing /boot in /etc/fstab on partition $part"
+      sed -i -e "/\W\/boot\W/s,^[^ \t]*,$bootDevice," "$tmpMnt/etc/fstab"
+    else
+      msg "info: $part is not a relevant partition"
+    fi
+    umount "$tmpMnt"
+  done < <( blkid | grep "LABEL" )
+
+  # cleamup temporary mountpoint
+  mount | grep -qw "$tmpMnt" || rm -fr "$tmpMnt"
+}
+
 # --- create and configure new boot-partition   ------------------------------
 
 doNewBoot() {
-  if [ -n "$bootDevice" ]; then
-    msg "error: no boot device specified"
+  local bootDevice="$targetDevice"
+  if [ -z "$bootDevice" ]; then
+    msg "error: no target boot device specified"
     exit 3
   elif [ ! -b "$bootDevice" ]; then
     msg "error: $bootDevice is no block device"
@@ -250,7 +286,7 @@ doNewBoot() {
   # format partition
   if [ -n "$format" ]; then
     msg "info: formatting partition $bootDevice with Fat32"
-    mkfs.fat $verbose -F 32 -n "boot" "$bootDevice"
+    mkfs.fat $verbose -F 32 "$bootDevice"
   else
     msg "warning: not formatting $targetDevice!"
   fi
@@ -266,6 +302,10 @@ doNewBoot() {
 
   # mount and copy /boot
   mount | grep -qw /boot || mount /boot
+  if [ $? -ne 0 ]; then
+    msg "error: could not mount /boot, aborting!"
+    exit 3
+  fi
   copyBoot "/boot/" "$mntNewBoot"          # copy to new boot
 
   umount "$mntNewBoot" && rm -fr "$mntNewBoot"
@@ -274,6 +314,10 @@ doNewBoot() {
   else
     msg "warning: could not label $bootDevice - please install fatlabel"
   fi
+
+  # change device for mountpoint /boot in all systems
+  fixAllFstab
+
   msg "info: activate USB-boot to and remove SD-card to boot from $bootDevice"
 }
 
@@ -293,7 +337,7 @@ doCopy() {
 
   # add sanity check
   if mount | grep -qw "$targetDevice"; then
-    msg "error: $targetPartition is mounted. Cowardly refusing to continue"
+    msg "error: $targetDevice is mounted. Cowardly refusing to continue"
     exit 3
   fi
 
@@ -349,78 +393,34 @@ doCopy() {
 
   msg "info: copied system to $targetDevice"
   if [ -z "$switch" -a -z "$switchSelect" ]; then
-    msg "info: use $0 with option '-s $targetDevice' to boot from new partition"
+    msg "info: use ${0##*/} with option '-s $targetDevice' to boot from new partition"
   else
-    msg "info: reboot the system to start from $rootDevice"
+    msg "info: reboot the system to start from $targetDevice"
   fi
-}
-
-# --- query new root device from user   --------------------------------------
-
-getNewRootDevice() {
-  :
-  # scan partitions for _boot
-  # build list with partition / label
-  # present select dialog
-
-  # create temporary mountpoint
-  local tmpMnt=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
-
-  # we only take partitions with label into account
-  local part label rest
-  declare -a opts
-  while read part rest; do
-    part="${part%:}"
-    msg "info: testing $part ..."
-    if ! mount -o ro "$part" "$tmpMnt"; then
-      msg "info: could not mount $part: ignoring"
-      continue
-    fi
-    if [ -d "$tmpMnt/_boot" ]; then
-      label=$(sed -e 's/LABEL="\([^"]*\)".*/\1/' <<< "$rest")
-      opts+=("$part: $label")
-      msg "info: fount _boot, adding $part to options"
-    else
-      msg "info: $part not a candidate partition"
-    fi
-    umount "$tmpMnt"
-  done < <( blkid | grep "LABEL" | sort )
-
-  # cleamup temporary mountpoint
-  grep -qw "$tmpMnt" && rm -fr "$tmpMnt"
-
-  if [ -z "${opts[@]}"; then
-    msg "info: no valid partitions available"
-    exit 3
-  else
-    opts+=("quit")
-  fi
-
-  # present selection list
-  local device
-  select device in "${opts[@]}"; do
-    [ -z "$device" ] && continue
-    if [ "$device" = "quit" ]; then
-      msg "info: aborting switch"
-      exit 0
-    else
-      break
-    fi
-  done
-
-  # extract device
-  targetDevice="${device%%:*}"
 }
 
 # --- switch boot-partition   ------------------------------------------------
 
 doSwitch() {
-  [ -n "$targetDevice" ] && getNewRootDevice
+  if [ -z "$targetDevice" ]; then
+    msg "error: no target partition selected"
+    exit 3
+  fi
   local rootDevice="$targetDevice"
 
   # mount /boot and update /_boot
   mount | grep -qw /boot || mount /boot
+  if [ $? -ne 0 ]; then
+    msg "error: could not mount /boot, aborting!"
+    exit 3
+  fi
   copyBoot "/boot/" "/_boot"             # backup to current root/_boot
+
+  # check if new root is currently mounted
+  if mount | grep -qw "$rootDevice"; then
+    msg "error: target partition currently mounted, aborting!"
+    exit 3
+  fi
 
   # mount new-root
   local mntNewRoot=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
