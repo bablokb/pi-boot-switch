@@ -29,7 +29,7 @@ to
   - switch between multiple systems (a sort of bootmanager).
 
 For a quick walkthrough read the document
-[doc/simple-usage.md] (./doc/simple-usage.md "simple usage").
+[doc/simple-usage.md](./doc/simple-usage.md "simple usage").
 
 
 Installation
@@ -48,7 +48,7 @@ Documentation
 -------------
 
 Besides the tutorial in
-[doc/simple-usage.md] (./doc/simple-usage.md "simple usage") there is
+[doc/simple-usage.md](./doc/simple-usage.md "simple usage") there is
 currently no extensive documentation. Options not covered in the tutorial
 are either not yet implemented, or for special use. Please check the
 code before using them.
@@ -72,7 +72,7 @@ For a short help just run
         -F          format target partition
         -L label    set label of target partition (also available standalone)
     
-        -B part     copy /boot to partition part and set part as new /boot
+        -B          copy /boot to partition part and set part as new /boot
     
         -s          switch to partition dest for next boot (requires reboot)
                     (select target with -t)
