@@ -108,8 +108,14 @@ There are two things to note: using `-F` destroys all existing data on
 the target-partition, so be careful to select the correct partition.
 Secondly, also without `-F` a copy operation is destructive. The
 current root-partion is replicated to the target-partition and this
-will automatically delete all files on the target-partition which are
-not on the source-partition.
+will overwrite all files and in addition automatically delete all
+files on the target-partition which are not on the source-partition.
+
+There is one exception if you also use the option `-k`: in this case,
+the `/home`-directory is not copied to the target-partition. So you
+keep data in the home-directories, but you would still loose all
+configuration files e.g. in`/etc`. So make sure to backup all files
+needed before you replicate.
 
 
 Labelling the system-partition
@@ -172,8 +178,9 @@ Note that switching the root-partition does not replicate user data. So
 don't be surprised that files you created (e.g. in /home/pi) are no longer
 there. They still exist, but on the original root-partition.
 
-It is planned to add an option to `pi-boot-switch` in a future version that
-replicates user data.
+To replicate user-data you have to add the option `-u`. This will copy all
+files from the `/home`-directory of the source-partition to the
+`/home`-directory of the target partition.
 
 
 Booting from the usb-device
@@ -285,4 +292,6 @@ system on sda3):
 Without the format option `-F` this will copy new or differing files.
 **Note that this command will also delete all files on `/dev/sda2` which
 are not on `/dev/sda3`. So be very careful that you don't loose any files
-you have created e.g. in your home-directory!!**
+you have created e.g. in your home-directory or in `/etc`!!** If you add
+the `-k`-option, user-data is not copied and the existing `/home`-directory
+on the target-partition will not be touched.
