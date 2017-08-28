@@ -25,6 +25,8 @@ setDefaults() {
   verbose=""
   format=""
   isSD=""
+  keepHome=""
+  updateHome=""
 
   # operations
   info=""
@@ -45,24 +47,28 @@ usage() {
   Possible options:\n\n\
     -I          show partition info
 
-    -c          copy partition (select target with -t)\n\
-    -f source   source partition (default: current root-partition)\n\
-                use with -c, e.g. '-f /dev/mmcblk0p2'\n\
-    -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')\n\
-    -S          target partition is on a SD-card, not an usb-device\n\
-    -F          format target partition\n\
+    -c          copy partition (select target with -t)
+    -f source   source partition (default: current root-partition)
+                use with -c, e.g. '-f /dev/mmcblk0p2'
+    -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')
+    -S          target partition is on a SD-card, not an usb-device
+    -F          format target partition
+    -k          keep existing /home on target during copy (don't use -F)
+
     -L label    set label of target partition (also available standalone)
 
     -B          copy /boot to partition dest and set dest as new /boot
 
-    -s          switch to partition dest for next boot (requires reboot)\n\
-                (select target with -t)\n\
+    -s          switch to partition dest for next boot (requires reboot)
+                (select target with -t)
+    -u          update /home on dest from current partition before switching
     -R          reboot immediately after switching
 
     -i image    install image to target partition
 
-    -v          verbose operation\n\
-    -h          show this help\n\
+
+    -v          verbose operation
+    -h          show this help
 "
   exit 3
 }
@@ -70,7 +76,7 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Icf:t:SFL:BsRi:vh" opt; do
+  while getopts ":Icf:t:SFkL:BsuRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
@@ -78,12 +84,12 @@ parseArguments() {
       t) targetDevice="$OPTARG";;
       S) isSD=1;;
       F) format=1;;
+      k) keepHome=1;;
       L) label=1; targetLabel="$OPTARG";;
       B) newBoot=1;;
       s) switch=1;;
+      u) updateHome=1;;
       R) reboot=1;;
-      u) updateRoot=1; rootDevice="$OPTARG";;
-      U) updateBoot=1;;
       i) install=1; srcImage="$OPTARG";;
       v) verbose="-v";;
       h) usage;;
@@ -116,7 +122,9 @@ copyRoot() {
   msg "info: copying $src to $dst"
   rsync $verbose -a -H -A -X -S -x --delete \
                  --exclude=/tmp/\*\* \
-                 --exclude=/var/tmp/\*\* "$src" "$dst"
+                 --exclude=/var/tmp/\*\* \
+                 ${keepHome:+"--exclude=/home"} \
+                 "$src" "$dst"
 }
 
 # --- copy files of boot-partition   -----------------------------------------
@@ -399,7 +407,7 @@ doCopy() {
   fi
 }
 
-# --- switch boot-partition   ------------------------------------------------
+# --- switch root-partition   ------------------------------------------------
 
 doSwitch() {
   if [ -z "$targetDevice" ]; then
@@ -438,6 +446,11 @@ doSwitch() {
 
   # copy /new/_boot -> /boot
   copyBoot "$mntNewRoot/_boot/" "/boot"
+
+  # update /home if requested
+  if [ "$updateHome" = "1" ]; then
+    rsync $verbose -a -H -A -X -S -x /home "$mntNewRoot"
+  fi
 
   # umount /new
   msg "info: unmounting $rootDevice"
