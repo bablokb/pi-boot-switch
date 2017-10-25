@@ -13,10 +13,43 @@
 
 # --- defaults used during installation   ----------------------------------
 
+PACKAGES="unzip rsync"
+PROJECT="pi-boot-switch"
+
+# --- basic packages   ------------------------------------------------------
+
+check_packages() {
+  local p
+  for p in "$@"; do
+    echo -en "Checking $p ... " >&2
+    dpkg -s "$p" 2>/dev/null | grep -q "Status.*ok" || return 0
+    echo "ok" >&2
+  done
+  return 1
+}
+
+install_packages() {
+  if [ -n "$PACKAGES" ] && check_packages $PACKAGES; then
+    echo -e "[INFO] installing additional packages" 2>&1
+    apt-get update
+    apt-get -y install $PACKAGES
+  fi
+}
+
+
 # --- install specific files   ----------------------------------------------
 
-for f in `find $(dirname "$0")/../files/ -type f`; do
-  cp -v "$f" "${f#*files}"
-  chown root:root "${f#*files}"
-done
-chmod 744 /usr/local/sbin/pi-boot-switch
+install_files() {
+  echo -e "[INFO] installing project files" 2>&1
+
+  for f in `find $(dirname "$0")/../files/ -type f`; do
+    cp -v "$f" "${f#*files}"
+    chown root:root "${f#*files}"
+  done
+  chmod 744 /usr/local/sbin/pi-boot-switch
+}
+
+# --- main program   --------------------------------------------------------
+
+install_packages
+install_files
