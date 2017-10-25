@@ -65,17 +65,18 @@ For a short help just run
         -I          show partition info
     
         -c          copy partition (select target with -t)
-        -f source   source partition (default: current root-partition)
-                    use with -c, e.g. '-f /dev/mmcblk0p2'
         -t dest     target partition (required for -i, -c or -s, e.g. '-t /dev/sdc')
         -S          target partition is on a SD-card, not an usb-device
         -F          format target partition
+        -k          keep existing /home on target during copy (don't use -F)
+
         -L label    set label of target partition (also available standalone)
     
         -B          copy /boot to partition part and set part as new /boot
     
         -s          switch to partition dest for next boot (requires reboot)
                     (select target with -t)
+        -u          update /home on dest from current partition before switching
         -R          reboot immediately after switching
     
         -i image    install image to target partition
