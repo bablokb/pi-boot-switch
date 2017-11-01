@@ -48,8 +48,6 @@ usage() {
     -I          show partition info
 
     -c          copy partition (select target with -t)
-    -f source   source partition (default: current root-partition)
-                use with -c, e.g. '-f /dev/mmcblk0p2'
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')
     -S          target partition is on a SD-card, not an usb-device
     -F          format target partition
@@ -66,7 +64,6 @@ usage() {
 
     -i image    install image to target partition
 
-
     -v          verbose operation
     -h          show this help
 "
@@ -76,11 +73,10 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Icf:t:SFkL:BsuRi:vh" opt; do
+  while getopts ":Ict:SFkL:BsuRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
-      f) srcPart="$OPTARG";;
       t) targetDevice="$OPTARG";;
       S) isSD=1;;
       F) format=1;;
@@ -332,7 +328,65 @@ doNewBoot() {
 # --- install an image to a partition   --------------------------------------
 
 doInstall() {
-  msg "info: sorry, not implemented yet!"
+  msg "info: installing $srcImage to $targetDevice"
+
+  # load kernel module for loop-mount
+  modprobe loop
+
+  # unzip image to temporary storage if necessary
+  local imgFile didUnzip
+  if [ "${srcImage##*.}" = "zip" ]; then
+    msg "info: unzipping $srcImage to $srcImage.img"
+    unzip -p "$srcImage" > "$srcImage.img"
+    imgFile="$srcImage.img"
+    didUnzip=1
+  else
+    imgFile="$srcImage"
+    didUnzip=0
+  fi
+
+  # create loop-partitions
+  local srcDevice
+  srcDevice=`losetup --show -f -P "$imgFile" 2>/dev/null`
+  if [ -z "$srcDevice" ]; then
+    msg "error: could not setup loop-devices for $imgFile!"
+    exit 3
+  fi
+  msg "info: src device is: $srcDevice"
+
+  # loop-mount partitions of image
+  # -> part1: boot
+  # -> part2: root
+  local mntDirSrc=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+  msg "info: mounting ${srcDevice}p2 on $mntDirSrc"
+  if ! mount "${srcDevice}p2" "$mntDirSrc"; then
+    msg "error: could not mount ${srcDevice}p2, aborting!"
+    losetup -D "$imgFile"
+    exit 3
+  fi
+  msg "info: mounting ${srcDevice}p1 on $mntDirSrc/boot"
+  if ! mount "${srcDevice}p1" "$mntDirSrc/boot"; then
+    msg "error: could not mount ${srcDevice}p1, aborting!"
+    umount "${srcDevice}p2"
+    losetup -D "$imgFile"
+    exit 3
+  fi
+
+  # copy files
+  doCopy "$mntDirSrc/"
+  msg "info: finished installing $srcImage to $targetDevice"
+
+  # umount and release loop-partitions
+  msg "info: cleaning up devices"
+  umount "${srcDevice}p1"
+  umount "${srcDevice}p2" && rm -fr "$mntDirSrc"
+  losetup -D "$imgFile"
+
+  # remove unzipped image
+  if [ "$didUnzip" -eq 1 ]; then
+    msg "info: removing temporary image"
+    rm -f "$srcImage.img"
+  fi
 }
 
 # --- copy files to target partition   ---------------------------------------
@@ -342,6 +396,8 @@ doCopy() {
     msg "error: no target partition selected"
     exit 3
   fi
+
+  local src="$1"
 
   # add sanity check
   if mount | grep -qw "$targetDevice"; then
@@ -370,7 +426,7 @@ doCopy() {
   fi
 
   # copy files
-  copyRoot / "$mntDirTarget"
+  copyRoot "$src" "$mntDirTarget"
 
   # fix fstab
   if [ -z "$isSD" ]; then
@@ -380,8 +436,8 @@ doCopy() {
   fi
 
   # mount and copy /boot
-  mount | grep -qw /boot || mount /boot
-  copyBoot "/boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
+  mount | grep -qw "${src}boot" || mount "${src}boot"
+  copyBoot "${src}boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
   
   # fix /_boot/cmdline.txt
   if [ -z "$isSD" ]; then
@@ -399,11 +455,13 @@ doCopy() {
   # umount target partitition
   umount "$mntDirTarget" && rm -fr "$mntDirTarget"
 
-  msg "info: copied system to $targetDevice"
-  if [ -z "$switch" -a -z "$switchSelect" ]; then
-    msg "info: use ${0##*/} with option '-s $targetDevice' to boot from new partition"
-  else
-    msg "info: reboot the system to start from $targetDevice"
+  if [ -z "$install" ]; then
+    msg "info: copied system to $targetDevice"
+    if [ -z "$switch" -a -z "$switchSelect" ]; then
+      msg "info: use ${0##*/} with option '-s $targetDevice' to boot from new partition"
+    else
+      msg "info: reboot the system to start from $targetDevice"
+    fi
   fi
 }
 
@@ -449,6 +507,7 @@ doSwitch() {
 
   # update /home if requested
   if [ "$updateHome" = "1" ]; then
+    msg "info: updating /home on $targetDevice"
     rsync $verbose -a -H -A -X -S -x /home "$mntNewRoot"
   fi
 
@@ -477,11 +536,13 @@ checkArguments
 
 if [ -n "$info" ]; then
   doInfo
-elif [ -n "$install" ]; then
-  doInstall
 else
-  # preserve order of execution
-  [ -n "$copy" ]       && doCopy
+  # preserve order of execution (start with copy)
+  if [ -n "$copy" ]; then
+    doCopy "/" ||  exit 3
+  elif [ -n "$install" ]; then
+    doInstall || exit 3
+  fi
   [ -n "$switch" ]     && doSwitch
   [ -n "$newBoot" ]    && doNewBoot
   [ -n "$label" ]      && doLabel
