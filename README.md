@@ -47,11 +47,21 @@ This just installs the script in `files/usr/local/sbin/pi-boot-switch` to
 Documentation
 -------------
 
-Besides the tutorial in
-[doc/simple-usage.md](./doc/simple-usage.md "simple usage") there is
-currently no extensive documentation. Options not covered in the tutorial
-are either not yet implemented, or for special use. Please check the
-code before using them.
+After installation, Raspbian usually expands it's root-filesystem and
+claims all available space on the SD-card. A prerequisite for
+`pi-boot-switch` is free space, so you have to shrink the filesystem
+and partition to regain some of it. How to do that is covered in the
+document
+[doc/shrink-rootsystem.md](./doc/shrink-rootsystem.md "Shrinking the root-filesystem").
+
+You can find a complete walkthrough of the most important options in the
+tutorial [doc/simple-usage.md](./doc/simple-usage.md "simple usage").
+
+Installing an additional image using the option `-i` is covered in
+[doc/image-install.md](./doc/image-install.md "image installation").
+
+Options not covered in these documents are either not yet implemented,
+or for special use. Please check the code before using them.
 
 For a short help just run
 
