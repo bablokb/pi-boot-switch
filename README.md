@@ -24,9 +24,11 @@ To run a system from an USB device, you have two options:
 The `pi-boot-switch`-script supports both options. The script allows you
 to
 
+  - copy your root-partition from the SD-card to SD-card.
   - copy your root-partition from the SD-card to the usb device.
   - copy your boot-partition from the SD-card to the usb device.
   - switch between multiple systems (a sort of bootmanager).
+  - install new images directly to a target-partition.
 
 For a quick walkthrough read the document
 [doc/simple-usage.md](./doc/simple-usage.md "simple usage").
