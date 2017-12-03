@@ -148,6 +148,8 @@ updateFstab() {
   local part="$1" fstabPath="$2"
   msg "info: fixing /etc/fstab on $part"
   sed -i -e "/\W\/\W/s,^[^ \t]*,$part," "$fstabPath"
+  local currentBootDevice=$(mount | grep -w /boot | cut -f1 -d" ")
+  sed -i -e "/\W\/boot\W/s,^[^ \t]*,$currentBootDevice," "$fstabPath"
 }
 
 # --- update cmdline.txt after copy   ----------------------------------------
