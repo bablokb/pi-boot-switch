@@ -482,7 +482,19 @@ doSwitch() {
     msg "error: could not mount /boot, aborting!"
     exit 3
   fi
-  copyBoot "/boot/" "/_boot"             # backup to current root/_boot
+
+  # check if new rootDevice is identical to current root-device
+  # i.e. we are at most undoing a switch
+  local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
+  if [ "$currentRoot" == "$rootDevice" ]; then
+    # we just have to update /boot from /_boot
+    copyBoot "/_boot/" "/boot"
+    return
+  else
+    # backup /boot to current root/_boot
+    copyBoot "/boot/" "/_boot"
+  fi
+
 
   # check if new root is currently mounted
   if mount | grep -qw "$rootDevice"; then
