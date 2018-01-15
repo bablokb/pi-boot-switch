@@ -31,6 +31,7 @@ setDefaults() {
   # operations
   info=""
   copy=""
+  copyOther=""
   label=""
   newBoot=""
   switch=""
@@ -47,8 +48,9 @@ usage() {
   Possible options:\n\n\
     -I          show partition info
 
-    -c          copy partition (select target with -t)
+    -c          copy current partition (select target with -t)
     -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')
+    -C other    copy from another partition (select target with -t)
     -S          target partition is on a SD-card, not an usb-device
     -F          format target partition
     -k          keep existing /home on target during copy (don't use -F)
@@ -73,10 +75,11 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":Ict:SFkL:BsuRi:vh" opt; do
+  while getopts ":IcC:t:SFkL:BsuRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
+      C) copyOther=1; otherPartition="$OPTARG";;
       t) targetDevice="$OPTARG";;
       S) isSD=1;;
       F) format=1;;
@@ -103,6 +106,18 @@ parseArguments() {
 checkArguments() {
  [ -n "$targetDevice" ] && \
    [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
+ if [ -n "$copyOther" ]; then
+   if [ -n "$copy" ]; then
+     msg "error: options -c and -C are mutually exclusive!"
+     exit 3
+   elif [ -z "$otherPartition" ]; then
+     msg "error: missing argument for option -C !"
+     exit 3
+   elif [ ! -b "$otherPartition" ]; then
+     msg "error: $otherPartition is not a valid device!"
+     exit 3
+   fi
+ fi
 }
 
 # --- write message to log and stderr   --------------------------------------
@@ -391,6 +406,37 @@ doInstall() {
   fi
 }
 
+# --- copy files from another partition to target partition   ----------------
+
+doCopyOther() {
+  # mount other partition if necessary
+  local mntOther didMount=0
+  mntOther=$(mount | grep -w "$otherPartition" | cut -f3 -d" ")
+  if [ -z "$mntOther" ]; then
+    didMount=1
+    mntOther=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+    mount -o ro "$otherPartition" "$mntOther"
+  fi
+
+  # check if partition is valid
+  if [ ! -d "$mntOther/_boot" ]; then
+    msg "error: $mntOther is not a valid partition"
+    if [ $didMount -eq 1 ]; then
+      umount "$otherPartition" && rm -fr "$mntOther"
+    fi
+    return 3
+  fi
+
+  # copy files
+  doCopy "$mntOther/"
+
+  # cleanup
+  if [ $didMount -eq 1 ]; then
+    umount "$otherPartition" && rm -fr "$mntOther"
+  fi
+  return 0
+}
+
 # --- copy files to target partition   ---------------------------------------
 
 doCopy() {
@@ -438,8 +484,10 @@ doCopy() {
   fi
 
   # mount and copy /boot
-  mount | grep -qw "${src}boot" || mount "${src}boot"
-  copyBoot "${src}boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
+  if [ -z "$copyOther" ]; then
+    mount | grep -qw "${src}boot" || mount "${src}boot"
+    copyBoot "${src}boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
+  fi
   
   # fix /_boot/cmdline.txt
   if [ -z "$isSD" ]; then
@@ -554,6 +602,8 @@ else
   # preserve order of execution (start with copy)
   if [ -n "$copy" ]; then
     doCopy "/" ||  exit 3
+  elif [ -n "$copyOther" ]; then
+    doCopyOther || exit 3
   elif [ -n "$install" ]; then
     doInstall || exit 3
   fi
