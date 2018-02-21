@@ -78,6 +78,7 @@ For a short help just run
     
         -c          copy partition (select target with -t)
         -t dest     target partition (required for -i, -c or -s, e.g. '-t /dev/sdc')
+        -C other    copy from another partition (select target with -t)
         -S          target partition is on a SD-card, not an usb-device
         -F          format target partition
         -k          keep existing /home on target during copy (don't use -F)
