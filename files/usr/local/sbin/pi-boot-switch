@@ -190,7 +190,7 @@ doInfo() {
   declare -A role
 
   # fetch current roles of partitions
-  local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
+  local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
   local currentBoot=$(mount | grep -w /boot | cut -f1 -d" ")
   local nextRoot=$(sed -e 's/.*root=\([^ ]*\) .*$/\1/' /boot/cmdline.txt)
   if grep -q PARTUUID <<< "$nextRoot"; then
@@ -261,7 +261,7 @@ doLabel() {
 
 fixAllFstab() {
   # fix current root partition
-  local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
+  local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
   msg "info: fixing /boot in /etc/fstab on current root-partition $part"
   sed -i -e "/\W\/boot\W/s,^[^ \t]*,$bootDevice," "/etc/fstab"
 
@@ -533,7 +533,7 @@ doSwitch() {
 
   # check if new rootDevice is identical to current root-device
   # i.e. we are at most undoing a switch
-  local currentRoot=$(mount | grep -w / | cut -f1 -d" ")
+  local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
   if [ "$currentRoot" == "$rootDevice" ]; then
     # we just have to update /boot from /_boot
     copyBoot "/_boot/" "/boot"
