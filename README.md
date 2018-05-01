@@ -1,6 +1,8 @@
 Pi USB Boot Switcher
 ====================
 
+=====> add toc
+
 Introduction
 ------------
 
@@ -96,3 +98,18 @@ For a short help just run
     
         -v          verbose operation
         -h          show this help
+
+
+Armbian support
+---------------
+
+Pi-boot-switch now also supports Armbian. Since Armbian uses a single
+partition for both the boot and root filesystem, you first have to
+convert the image. You can download a suitable script from my
+[armbian-convert project](https://github.com/bablokb/armbian-convert "armbian-convert-project"). This project contains a single file `armbian_convert.sh`,
+which will convert a typical armbian 7z-image with a single partition
+to an image with two partitions (one for boot and one for root).
+
+Once converted, you can install the image like any other image with
+e.g. `dd` to your sd-card and use it with `pi-boot-switch` to switch
+between partitions.
