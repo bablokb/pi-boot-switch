@@ -37,6 +37,15 @@ setDefaults() {
   switch=""
   reboot=""
   install=""
+
+  # environment
+  if [ -f "/etc/armbian-release" ]; then
+    bootFile="armbianEnv.txt"
+    bootParm="rootdev"
+  else
+    bootFile="cmdline.txt"
+    bootParm="root"
+  fi
 }
 
 # --- help   -----------------------------------------------------------------
@@ -172,7 +181,7 @@ updateFstab() {
 updateCmdline() {
   local part="$1" cmdlinePath="$2"
   msg "info: fixing $cmdlinePath"
-  sed -i -e "s,root=[^ ]*,root=$part," "$cmdlinePath"
+  sed -i -e "s,${bootParm}=[^ ]*,${bootParm}=$part," "$cmdlinePath"
 }
 
 # --- get default label   ----------------------------------------------------
@@ -192,7 +201,7 @@ doInfo() {
   # fetch current roles of partitions
   local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
   local currentBoot=$(mount | grep -w /boot | cut -f1 -d" ")
-  local nextRoot=$(sed -e 's/.*root=\([^ ]*\) .*$/\1/' /boot/cmdline.txt)
+  local nextRoot=$(sed -ne "s/.*${bootParm}=\([^ ]*\) \?.*\$/\1/p" "/boot/$bootFile")
   if grep -q PARTUUID <<< "$nextRoot"; then
     nextRoot=$(blkid -l -t "$nextRoot" | cut -f1 -d":")
   fi
@@ -491,9 +500,9 @@ doCopy() {
   
   # fix /_boot/cmdline.txt
   if [ -z "$isSD" ]; then
-    updateCmdline "$targetDevice" "$mntDirTarget/_boot/cmdline.txt"
+    updateCmdline "$targetDevice" "$mntDirTarget/_boot/$bootFile"
   else
-    updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/cmdline.txt"
+    updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/$bootFile"
   fi
 
   # get label if empty
