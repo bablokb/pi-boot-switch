@@ -1,8 +1,6 @@
 Pi USB Boot Switcher
 ====================
 
-=====> add toc
-
 Introduction
 ------------
 
