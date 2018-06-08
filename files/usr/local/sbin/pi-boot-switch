@@ -55,29 +55,29 @@ usage() {
   echo -e "\n$pgm: manage Raspberry Pi multiboot system\n\
   \nusage: `basename $0` [options]\n\
   Possible options:\n\n\
-    -I          show partition info
+    -I             show partition info
 
-    -c          copy current partition (select target with -t)
-    -t dest     target partition (required for -i or -c, e.g. '-t /dev/sdc')
-    -C other    copy from another partition (select target with -t)
-    -S          target partition is on a SD-card, not an usb-device
-    -F          format target partition
-    -k          keep existing /home on target during copy (don't use -F)
+    -c             copy current partition (select target with -t)
+    -t dest[=name] target partition (required for -i or -c, e.g. '-t /dev/sdc')
+    -C other       copy from another partition (select target with -t)
+    -S             target partition is on a SD-card, not an usb-device
+    -F             format target partition
+    -k             keep existing /home on target during copy (don't use -F)
 
-    -L label    set label of target partition (also available standalone)
-    -D descr    set description of target partition (also available standalone)
+    -L label       set label of target partition (also available standalone)
+    -D descr       set description of target partition (also available standalone)
 
-    -B          copy /boot to partition dest and set dest as new /boot
+    -B             copy /boot to partition dest and set dest as new /boot
 
-    -s          switch to partition dest for next boot (requires reboot)
-                (select target with -t)
-    -u          update /home on dest from current partition before switching
-    -R          reboot immediately after switching
+    -s             switch to partition dest for next boot (requires reboot)
+                   (select target with -t)
+    -u             update /home on dest from current partition before switching
+    -R             reboot immediately after switching
 
-    -i image    install image to target partition
+    -i image       install image to target partition
 
-    -v          verbose operation
-    -h          show this help
+    -v             verbose operation
+    -h             show this help
 "
   exit 3
 }
@@ -115,8 +115,17 @@ parseArguments() {
 # --- check arguments   ------------------------------------------------------
 
 checkArguments() {
- [ -n "$targetDevice" ] && \
+ if [ -n "$targetDevice" ]; then
    [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
+   # rename feature: extract name of target-device for use in fstab + cmdline.txt
+   if grep -q '=' <<< "$targetDevice"; then
+     IFS== read targetDevice targetDeviceName <<< "$targetDevice"
+     [ "${targetDeviceName:0:4}" != "/dev" ] && \
+                                  targetDeviceName="/dev/$targetDeviceName"
+   else
+     targetDeviceName="$targetDevice"
+   fi
+ fi
  if [ -n "$copyOther" ]; then
    if [ -n "$copy" ]; then
      msg "error: options -c and -C are mutually exclusive!"
@@ -530,7 +539,7 @@ doCopy() {
 
   # fix fstab
   if [ -z "$isSD" ]; then
-    updateFstab "$targetDevice" "$mntDirTarget/etc/fstab"
+    updateFstab "$targetDeviceName" "$mntDirTarget/etc/fstab"
   else
     updateFstab "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/etc/fstab"
   fi
@@ -543,7 +552,7 @@ doCopy() {
   
   # fix /_boot/cmdline.txt
   if [ -z "$isSD" ]; then
-    updateCmdline "$targetDevice" "$mntDirTarget/_boot/$bootFile"
+    updateCmdline "$targetDeviceName" "$mntDirTarget/_boot/$bootFile"
   else
     updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/$bootFile"
   fi

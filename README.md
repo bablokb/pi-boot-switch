@@ -74,28 +74,29 @@ For a short help just run
     usage: pi-boot-switch [options]
       Possible options:
     
-        -I          show partition info
+        -I             show partition info
     
-        -c          copy partition (select target with -t)
-        -t dest     target partition (required for -i, -c or -s, e.g. '-t /dev/sdc')
-        -C other    copy from another partition (select target with -t)
-        -S          target partition is on a SD-card, not an usb-device
-        -F          format target partition
-        -k          keep existing /home on target during copy (don't use -F)
+        -c             copy current partition (select target with -t)
+        -t dest[=name] target partition (required for -i or -c, e.g. '-t /dev/sdc')
+        -C other       copy from another partition (select target with -t)
+        -S             target partition is on a SD-card, not an usb-device
+        -F             format target partition
+        -k             keep existing /home on target during copy (don't use -F)
+    
+        -L label       set label of target partition (also available standalone)
+        -D descr       set description of target partition (also available standalone)
+    
+        -B             copy /boot to partition dest and set dest as new /boot
+    
+        -s             switch to partition dest for next boot (requires reboot)
+                       (select target with -t)
+        -u             update /home on dest from current partition before switching
+        -R             reboot immediately after switching
+    
+        -i image       install image to target partition
 
-        -L label    set label of target partition (also available standalone)
-    
-        -B          copy /boot to partition part and set part as new /boot
-    
-        -s          switch to partition dest for next boot (requires reboot)
-                    (select target with -t)
-        -u          update /home on dest from current partition before switching
-        -R          reboot immediately after switching
-    
-        -i image    install image to target partition
-    
-        -v          verbose operation
-        -h          show this help
+        -v             verbose operation
+        -h             show this help
 
 
 Armbian support
