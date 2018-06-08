@@ -11,7 +11,6 @@
 
 # some constants   ------------------------------------------------------------
 
-BOOT_PART="/boot"
 BOOT_BACKUP="/_boot"
 FS_TYPE="ext4"
 REBOOT_DELAY="5"
@@ -33,6 +32,7 @@ setDefaults() {
   copy=""
   copyOther=""
   label=""
+  description=""
   newBoot=""
   switch=""
   reboot=""
@@ -65,6 +65,7 @@ usage() {
     -k          keep existing /home on target during copy (don't use -F)
 
     -L label    set label of target partition (also available standalone)
+    -D descr    set description of target partition (also available standalone)
 
     -B          copy /boot to partition dest and set dest as new /boot
 
@@ -84,7 +85,7 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":IcC:t:SFkL:BsuRi:vh" opt; do
+  while getopts ":IcC:t:SFkL:D:BsuRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
@@ -94,6 +95,7 @@ parseArguments() {
       F) format=1;;
       k) keepHome=1;;
       L) label=1; targetLabel="$OPTARG";;
+      D) description="$OPTARG";;
       B) newBoot=1;;
       s) switch=1;;
       u) updateHome=1;;
@@ -153,17 +155,9 @@ copyBoot() {
   local src="$1" dst="$2"
   [ ! -d "$dst" ] && mkdir "$dst"
   msg "info: copying $src to $dst"
-  rsync $verbose -a --delete --no-owner --no-group --modify-window=2 "$src" "$dst"
-}
-
-# --- restore files of boot-partition   --------------------------------------
-
-restoreBoot() {
-  local src="$1"
-  [ ! -d /boot ] && mkdir /boot
-  grep -qw "/boot" /etc/mtab || mount /boot
-  msg "info: restoring /boot from $src"
-  copyBoot "$src/" "/boot"
+  rsync $verbose -a --delete --no-owner --no-group --modify-window=2 \
+          --exclude="pi-boot-switch.txt" --filter="P pi-boot-switch.txt" \
+            "$src" "$dst"
 }
 
 # --- update fstab after copy   ----------------------------------------------
@@ -206,18 +200,20 @@ doInfo() {
     nextRoot=$(blkid -l -t "$nextRoot" | cut -f1 -d":")
   fi
 
-  role[$currentRoot]="current root"
+  role[$currentRoot]="curr root"
   if [ -n "${role[$nextRoot]}" ]; then
-    role[$nextRoot]+=" / next root"
+    role[$nextRoot]="curr/next root"
   else
     role[$nextRoot]="next root"
   fi
-  role[$currentBoot]="current boot"
+  role[$currentBoot]="curr boot"
 
-  # check all partitions and print label and role
+  readDescription
 
-  echo "Partition       | Label            | Role"
-  echo "----------------|------------------|---------------------"
+  # check all partitions and print label, role and description
+
+  echo "Partition       | Label            | Role           | Description"
+  echo "----------------|------------------|----------------|---------------"
 
   local part label rest
   ( while read part rest; do
@@ -227,7 +223,7 @@ doInfo() {
       label=""
     fi
     part="${part%:}"
-    printf "%-15s | %-16s | %-s\n" "$part" "$label" "${role[$part]}"
+    printf "%-15s | %-16s | %-14s | %-s\n" "$part" "$label" "${role[$part]}" "${partDescription[$part]}"
   done < <( blkid | grep PARTUUID)
   ) | sort
 }
@@ -240,7 +236,7 @@ doLabel() {
   if [ -n "$targetDevice" ]; then
     device="$targetDevice"
   else
-    device=$(mount | grep -w / | cut -d" " -f1)
+    device=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
   fi
 
   # query filesystem type
@@ -264,6 +260,50 @@ doLabel() {
   else
     msg "warning: could not label $device - unsupported filesystem type"
   fi
+}
+
+# --- add description for current/target partition   -------------------------
+
+doDescription() {
+  local device
+  if [ -n "$targetDevice" ]; then
+    device="$targetDevice"
+  else
+    device=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
+  fi
+
+  # read current description
+  readDescription
+  partDescription["$device"]="$description"
+  writeDescription
+}
+
+# --- read partition descriptions   ------------------------------------------
+
+readDescription() {
+  declare -A -g  partDescription
+  if [ ! -f "/boot/pi-boot-switch.txt" ]; then
+    msg "info: no partition descriptions available"
+    return
+  fi
+
+  msg "info: reading partition descriptions from /boot/pi-boot-switch.txt"
+  local part desc
+  while read part desc; do
+    partDescription["${part/:}"]="$desc"
+  done < /boot/pi-boot-switch.txt
+}
+
+# --- write partition descriptions   ------------------------------------------
+
+writeDescription() {
+  declare -A -g  partDescription
+
+  msg "info: writing partition descriptions to /boot/pi-boot-switch.txt"
+  local key
+  for key in "${!partDescription[@]}"; do
+    echo "$key: ${partDescription[$key]}"
+  done > /boot/pi-boot-switch.txt
 }
 
 # --- fix /etc/fstab on all root-devices   -----------------------------------
@@ -337,6 +377,9 @@ doNewBoot() {
     exit 3
   fi
   copyBoot "/boot/" "$mntNewBoot"          # copy to new boot
+  if [ -f "/boot/pi-boot-switch.txt" ]; then
+    cp -a "/boot/pi-boot-switch.txt" "$mntNewBoot"
+  fi
 
   umount "$mntNewBoot" && rm -fr "$mntNewBoot"
   if type -p fatlabel > /dev/null; then
@@ -616,8 +659,9 @@ else
   elif [ -n "$install" ]; then
     doInstall || exit 3
   fi
-  [ -n "$switch" ]     && doSwitch
-  [ -n "$newBoot" ]    && doNewBoot
-  [ -n "$label" ]      && doLabel
-  [ -n "$reboot" ]     && doReboot
+  [ -n "$switch" ]      && doSwitch
+  [ -n "$newBoot" ]     && doNewBoot
+  [ -n "$label" ]       && doLabel
+  [ -n "$description" ] && doDescription
+  [ -n "$reboot" ]      && doReboot
 fi
