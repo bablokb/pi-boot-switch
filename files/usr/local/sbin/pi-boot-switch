@@ -227,7 +227,7 @@ doInfo() {
   local part label rest
   ( while read part rest; do
     if grep -qw LABEL <<< "$rest"; then
-      label=$(sed -e 's/LABEL="\([^"]*\)".*/\1/' <<< "$rest")
+      label=$(sed -e 's/.*LABEL="\([^"]*\)".*/\1/' <<< "$rest")
     else
       label=""
     fi
