@@ -82,6 +82,7 @@ For a short help just run
         -S             target partition is on a SD-card, not an usb-device
         -F             format target partition
         -k             keep existing /home on target during copy (don't use -F)
+        -U             use UUIDs instead of device-names
     
         -L label       set label of target partition (also available standalone)
         -D descr       set description of target partition (also available standalone)
@@ -112,3 +113,8 @@ to an image with two partitions (one for boot and one for root).
 Once converted, you can install the image like any other image with
 e.g. `dd` to your sd-card and use it with `pi-boot-switch` to switch
 between partitions.
+
+Armbian uses UUIDs for referencing the root-device within `/boot/armbianEnv.txt`.
+The option `-U` will keep the UUIDs, without this option newly copied
+partitions will use device names. This does no harm but is not the Armbian
+way of doing it.
