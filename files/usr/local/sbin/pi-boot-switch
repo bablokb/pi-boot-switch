@@ -26,6 +26,7 @@ setDefaults() {
   isSD=""
   keepHome=""
   updateHome=""
+  useUUID=0
 
   # operations
   info=""
@@ -63,6 +64,7 @@ usage() {
     -S             target partition is on a SD-card, not an usb-device
     -F             format target partition
     -k             keep existing /home on target during copy (don't use -F)
+    -U             use UUIDs instead of device-names
 
     -L label       set label of target partition (also available standalone)
     -D descr       set description of target partition (also available standalone)
@@ -85,7 +87,7 @@ usage() {
 # --- parse arguments and set variables   ------------------------------------
 
 parseArguments() {
-  while getopts ":IcC:t:SFkL:D:BsuRi:vh" opt; do
+  while getopts ":IcC:t:SFkUL:D:BsuRi:vh" opt; do
     case $opt in
       I) info=1;;
       c) copy=1;;
@@ -94,6 +96,7 @@ parseArguments() {
       S) isSD=1;;
       F) format=1;;
       k) keepHome=1;;
+      U) useUUID=1;;
       L) label=1; targetLabel="$OPTARG";;
       D) description="$OPTARG";;
       B) newBoot=1;;
@@ -169,13 +172,42 @@ copyBoot() {
             "$src" "$dst"
 }
 
+# --- query current root/boot device   ---------------------------------------
+
+getCurrentDevice() {
+  if [ "$1" = "UUID" ]; then
+    findmnt -no UUID "$2"
+  else
+    findmnt -no SOURCE "$2"
+  fi
+}
+
+# --- query next root device   -----------------------------------------------
+
+getNextRootDevice() {
+  local nextRoot=$(sed -ne "s/.*${bootParm}=\([^ ]*\) \?.*\$/\1/p" \
+                                                            "/boot/$bootFile")
+  if grep -qi UUID <<< "$nextRoot"; then
+    nextRoot=$(blkid -l -o export -t "$nextRoot" | \
+                                             sed -ne "/DEVNAME/s/DEVNAME=//p")
+  fi
+  echo "$nextRoot"
+}
+
 # --- update fstab after copy   ----------------------------------------------
 
 updateFstab() {
   local part="$1" fstabPath="$2"
-  msg "info: fixing /etc/fstab on $part"
+  msg "info: fixing / in /etc/fstab on $part"
   sed -i -e "/\W\/\W/s,^[^ \t]*,$part," "$fstabPath"
-  local currentBootDevice=$(mount | grep -w /boot | cut -f1 -d" ")
+
+  msg "info: fixing /boot in /etc/fstab on $part"
+  local currentBootDevice
+  if [ $useUUID -eq 1 ]; then
+    currentBootDevice="UUID=$(getCurrentDevice UUID /boot)"
+  else
+    currentBootDevice=$(getCurrentDevice NAME /boot)
+  fi
   sed -i -e "/\W\/boot\W/s,^[^ \t]*,$currentBootDevice," "$fstabPath"
 }
 
@@ -202,12 +234,9 @@ doInfo() {
   declare -A role
 
   # fetch current roles of partitions
-  local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
-  local currentBoot=$(mount | grep -w /boot | cut -f1 -d" ")
-  local nextRoot=$(sed -ne "s/.*${bootParm}=\([^ ]*\) \?.*\$/\1/p" "/boot/$bootFile")
-  if grep -q PARTUUID <<< "$nextRoot"; then
-    nextRoot=$(blkid -l -t "$nextRoot" | cut -f1 -d":")
-  fi
+  local currentRoot=$(getCurrentDevice NAME /)
+  local currentBoot=$(getCurrentDevice NAME /boot)
+  local nextRoot=$(getNextRootDevice)
 
   role[$currentRoot]="curr root"
   if [ -n "${role[$nextRoot]}" ]; then
@@ -245,12 +274,11 @@ doLabel() {
   if [ -n "$targetDevice" ]; then
     device="$targetDevice"
   else
-    device=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
+    device=$(getCurrentDevice NAME /)
   fi
 
   # query filesystem type
-  local fstype=$(blkid | \
-    sed -ne "/${device:5}/s/.*TYPE=\"\([^\"]*\).*/\1/p")
+  local fstype=$(lsblk -nlo FSTYPE "$device" 2>/dev/null)
 
   if [ -z "$fstype" ]; then
     msg "error: $device has no filesystem"
@@ -278,7 +306,7 @@ doDescription() {
   if [ -n "$targetDevice" ]; then
     device="$targetDevice"
   else
-    device=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
+    device=$(getCurrentDevice NAME /)
   fi
 
   # read current description
@@ -318,16 +346,20 @@ writeDescription() {
 # --- fix /etc/fstab on all root-devices   -----------------------------------
 
 fixAllFstab() {
+  # replace bootDevice (devname) with uuid if necessary
+  if [ $useUUID -eq 1 ]; then
+    local uuid=$(lsblk -nlo UUID "$bootDevice")
+    local bootDevice="UUID=$uuid"
+  fi
   # fix current root partition
-  local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
   msg "info: fixing /boot in /etc/fstab on current root-partition $part"
   sed -i -e "/\W\/boot\W/s,^[^ \t]*,$bootDevice," "/etc/fstab"
 
   # create temporary mountpoint
   local tmpMnt=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
 
-  # we only take partitions with label into account
-  local part rest
+  # we only take partitions with label into account and skip the current root
+  local part rest currentRoot=$(getCurrentDevice NAME /)
   while read part rest; do
     part="${part%:}"
     [ "$part" = "$currentRoot" ] && continue
@@ -344,7 +376,7 @@ fixAllFstab() {
       msg "info: $part is not a relevant partition"
     fi
     umount "$tmpMnt"
-  done < <( blkid | grep "LABEL" )
+  done < <( blkid -s LABEL)
 
   # cleamup temporary mountpoint
   mount | grep -qw "$tmpMnt" || rm -fr "$tmpMnt"
@@ -385,8 +417,9 @@ doNewBoot() {
     msg "error: could not mount /boot, aborting!"
     exit 3
   fi
-  copyBoot "/boot/" "$mntNewBoot"          # copy to new boot
+  copyBoot "/boot/" "$mntNewBoot"   # copy to new boot and ...
   if [ -f "/boot/pi-boot-switch.txt" ]; then
+    # ... also copy excluded pi-boot-switch.txt
     cp -a "/boot/pi-boot-switch.txt" "$mntNewBoot"
   fi
 
@@ -526,6 +559,11 @@ doCopy() {
     msg "warning: not formatting $targetDevice!"
   fi
 
+  # query UUID of targetDevice
+  if [ $useUUID -eq 1 ]; then
+      targetUUID=$(blkid -o export -s UUID "$targetDevice" | grep "UUID")
+  fi
+
   # mount target partition
   local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
   msg "info: mounting $targetDevice on $mntDirTarget"
@@ -538,7 +576,9 @@ doCopy() {
   copyRoot "$src" "$mntDirTarget"
 
   # fix fstab
-  if [ -z "$isSD" ]; then
+  if [ $useUUID -eq 1 ]; then
+    updateFstab "$targetUUID" "$mntDirTarget/etc/fstab"
+  elif [ -z "$isSD" ]; then
     updateFstab "$targetDeviceName" "$mntDirTarget/etc/fstab"
   else
     updateFstab "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/etc/fstab"
@@ -551,7 +591,9 @@ doCopy() {
   fi
   
   # fix /_boot/cmdline.txt
-  if [ -z "$isSD" ]; then
+  if [ $useUUID -eq 1 ]; then
+    updateCmdline "$targetUUID" "$mntDirTarget/_boot/$bootFile"
+  elif [ -z "$isSD" ]; then
     updateCmdline "$targetDeviceName" "$mntDirTarget/_boot/$bootFile"
   else
     updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/$bootFile"
@@ -594,7 +636,7 @@ doSwitch() {
 
   # check if new rootDevice is identical to current root-device
   # i.e. we are at most undoing a switch
-  local currentRoot=$(mount | sed -n "/\W\/\W/s/\(^[^ \t]*\).*/\1/p")
+  local currentRoot=$(getCurrentDevice NAME /)
   if [ "$currentRoot" == "$rootDevice" ]; then
     # we just have to update /boot from /_boot
     copyBoot "/_boot/" "/boot"
