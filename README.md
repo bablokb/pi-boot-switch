@@ -39,7 +39,7 @@ Installation
 
 To install the script, just run
 
-    git checkout https://github.com/bablokb/pi-boot-switch.git
+    git clone https://github.com/bablokb/pi-boot-switch.git
     sudo tools/install
 
 This just installs the script in `files/usr/local/sbin/pi-boot-switch` to
