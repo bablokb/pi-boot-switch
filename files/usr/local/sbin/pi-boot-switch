@@ -167,7 +167,7 @@ copyBoot() {
   local src="$1" dst="$2"
   [ ! -d "$dst" ] && mkdir "$dst"
   msg "info: copying $src to $dst"
-  rsync $verbose -a --delete --no-owner --no-group --modify-window=2 \
+  rsync $verbose -a --delete --inplace --no-owner --no-group --modify-window=2 \
           --exclude="pi-boot-switch.txt" --filter="P pi-boot-switch.txt" \
             "$src" "$dst"
 }
