@@ -305,8 +305,17 @@ doDescription() {
   local device
   if [ -n "$targetDevice" ]; then
     device="$targetDevice"
+    # keep copy of description in _boot/pi-boot-switch.txt.self
+    local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+    msg "info: mounting $targetDevice on $mntDirTarget"
+    if mount "$targetDevice" "$mntDirTarget"; then
+      echo "$description" > "$mntDirTarget/_boot/pi-boot-switch.txt.self"
+      msg "info: umounting $targetDevice"
+      umount "$mntDirTarget" && rm -fr "$mntDirTarget"
+    fi
   else
     device=$(getCurrentDevice NAME /)
+    echo "$description" > "/_boot/pi-boot-switch.txt.self"
   fi
 
   # read current description
