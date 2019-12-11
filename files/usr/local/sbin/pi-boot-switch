@@ -159,6 +159,8 @@ copyRoot() {
                  --exclude=/var/tmp/\*\* \
                  ${keepHome:+"--exclude=/home"} \
                  "$src" "$dst"
+  # rsync destroys swap-files, so copy explicitly
+  [ -f "$src/var/swap" ] && cp -a "$src/var/swap" "$dst/var/swap"
 }
 
 # --- copy files of boot-partition   -----------------------------------------
