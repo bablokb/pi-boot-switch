@@ -320,6 +320,7 @@ doDescription() {
     device=$(getCurrentDevice NAME /)
     mkdir -p "/_boot"
     echo "$description" > "/_boot/pi-boot-switch.txt.self"
+    echo "$description" > "/boot/pi-boot-switch.txt.self"
   fi
 
   # read current description
