@@ -311,12 +311,14 @@ doDescription() {
     local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
     msg "info: mounting $targetDevice on $mntDirTarget"
     if mount "$targetDevice" "$mntDirTarget"; then
+      mkdir -p "$mntDirTarget/_boot"
       echo "$description" > "$mntDirTarget/_boot/pi-boot-switch.txt.self"
       msg "info: umounting $targetDevice"
       umount "$mntDirTarget" && rm -fr "$mntDirTarget"
     fi
   else
     device=$(getCurrentDevice NAME /)
+    mkdir -p "/_boot"
     echo "$description" > "/_boot/pi-boot-switch.txt.self"
   fi
 
