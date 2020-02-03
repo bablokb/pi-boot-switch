@@ -625,7 +625,7 @@ doCopy() {
   if [ -z "$install" ]; then
     msg "info: copied system to $targetDevice"
     if [ -z "$switch" -a -z "$switchSelect" ]; then
-      msg "info: use ${0##*/} with option '-s $targetDevice' to boot from new partition"
+      msg "info: use ${0##*/} with option '-s -t $targetDevice' to boot from new partition"
     else
       msg "info: reboot the system to start from $targetDevice"
     fi
