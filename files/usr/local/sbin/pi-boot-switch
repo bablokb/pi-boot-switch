@@ -265,7 +265,7 @@ doInfo() {
     part="${part%:}"
     printf "%-15s | %-16s | %-14s | %-s\n" "$part" "$label" "${role[$part]}" "${partDescription[$part]}"
   done < <( blkid | grep PARTUUID)
-  ) | sort
+  ) | sort --version-sort
 }
 
 # --- read labels   ----------------------------------------------------------
