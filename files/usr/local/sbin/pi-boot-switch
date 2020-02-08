@@ -629,17 +629,23 @@ doCopy() {
   fi
 
   # get label if empty
+  local srcPart=$(findmnt -no SOURCE `stat --printf "%m" "$src"`)
   if [ -z "$targetLabel" -a -z "$(lsblk -nlo LABEL $targetDevice)" ]; then
-    local srcPart=$(findmnt -no SOURCE `stat --printf "%m" "$src"`)
     targetLabel=$(lsblk -nlo LABEL "$srcPart")
-    [ -z "$targetLabel" ] && getLabel "$mntDirTarget"
+    if [ -z "$targetLabel" ]; then
+      getLabel "$mntDirTarget"
+      msg "info: using default label"
+    else
+      msg "info: using label from partition $srcPart"
+    fi
     label=1                      # force labelling
   fi
 
   # get description if empty
   if [ -z "$description" ]; then
     readDescription
-    description="$partDescription[$targetDevice]"   # forces update of description
+    description="${partDescription[$srcPart]}" # forces update of description
+    msg "info: using description from partition $srcPart"
   fi
 
   # umount target partitition
