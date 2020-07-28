@@ -19,6 +19,7 @@ REBOOT_DELAY="5"
 
 setDefaults() {
   targetDevice=""
+  targetDir=""
   rootDevice=""
   bootDevice=""
   verbose=""
@@ -59,8 +60,8 @@ usage() {
     -I             show partition info
 
     -c             copy current partition (select target with -t)
-    -t dest[=name] target partition (required for -i or -c, e.g. '-t /dev/sdc')
-    -C other       copy from another partition (select target with -t)
+    -t dest[=name] target partition/dir (required for -i or -c, e.g. '-t /dev/sdc')
+    -C other       copy from another partition/dir (select target with -t)
     -S             target partition is on a SD-card, not an usb-device
     -F             format target partition
     -k             keep existing /home on target during copy (don't use -F)
@@ -119,6 +120,34 @@ parseArguments() {
 
 checkArguments() {
  if [ -n "$targetDevice" ]; then
+   if [ -d "$targetDevice" ]; then
+     if [ $(ls -1 "$targetDevice" | wc -l) -gt 0 ]; then
+       msg "error: directory $targetDevice is not empty!"
+       exit 3
+     fi
+     if [ -z "$copy" -a -z "$copyOther" ]; then
+       msg "error: a directory-target requires options -c or -C!"
+       exit 3
+     fi
+     if [ "$useUUID" -eq 1 ]; then
+       msg "error: option -U not supported for directory-targets!"
+       exit 3
+     fi
+     if ! grep -q '=' <<< "$targetDevice"; then
+       msg "error: device-name for directory-target required!"
+       exit 3
+     else
+       targetDir="${targetDevice#*=}"
+       targetDeviceName="${targetDevice%=*}"
+     fi
+     # disable unsupported options
+     label=""
+     switch=""
+     description=""
+     newBoot=""
+     reboot=""
+   fi
+ else
    [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
    # rename feature: extract name of target-device for use in fstab + cmdline.txt
    if grep -q '=' <<< "$targetDevice"; then
@@ -129,6 +158,7 @@ checkArguments() {
      targetDeviceName="$targetDevice"
    fi
  fi
+
  if [ -n "$copyOther" ]; then
    if [ -n "$copy" ]; then
      msg "error: options -c and -C are mutually exclusive!"
@@ -136,6 +166,8 @@ checkArguments() {
    elif [ -z "$otherPartition" ]; then
      msg "error: missing argument for option -C !"
      exit 3
+   elif [ -d "$otherPartition" ]; then
+       srcDir="$otherPartition"
    elif [ ! -b "$otherPartition" ]; then
      msg "error: $otherPartition is not a valid device!"
      exit 3
