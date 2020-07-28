@@ -603,21 +603,25 @@ doCopy() {
   local src="$1"
 
   # add sanity check
-  if mount | grep -qw "$targetDevice"; then
-    msg "error: $targetDevice is mounted. Cowardly refusing to continue"
-    exit 3
+  if [ -z "$targetDir" ]; then
+    if mount | grep -qw "$targetDevice"; then
+      msg "error: $targetDevice is mounted. Cowardly refusing to continue"
+      exit 3
+    fi
   fi
 
   # format target partition
-  if [ -n "$format" ]; then
-    msg "info: formatting partition $targetDevice with $FS_TYPE"
-    if [ -n "$verbose" ]; then
-      mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetDevice"
+  if [ -z "$targetDir" ]; then
+    if [ -n "$format" ]; then
+      msg "info: formatting partition $targetDevice with $FS_TYPE"
+      if [ -n "$verbose" ]; then
+        mkfs.$FS_TYPE -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetDevice"
+      else
+        mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetDevice"
+      fi
     else
-      mkfs.$FS_TYPE -q -F -E "lazy_itable_init=0,lazy_journal_init=0"  "$targetDevice"
+      msg "warning: not formatting $targetDevice!"
     fi
-  else
-    msg "warning: not formatting $targetDevice!"
   fi
 
   # query UUID of targetDevice
@@ -625,12 +629,16 @@ doCopy() {
       targetUUID=$(blkid -o export -s UUID "$targetDevice" | grep "UUID")
   fi
 
-  # mount target partition
-  local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
-  msg "info: mounting $targetDevice on $mntDirTarget"
-  if ! mount "$targetDevice" "$mntDirTarget"; then
-    msg "error: could not mount $targetDevice, aborting!"
-    exit 3
+  if [ -z "$targetDir" ]; then
+    # mount target partition
+    local mntDirTarget=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+    msg "info: mounting $targetDevice on $mntDirTarget"
+    if ! mount "$targetDevice" "$mntDirTarget"; then
+      msg "error: could not mount $targetDevice, aborting!"
+      exit 3
+    fi
+  else
+    local mntDirTarget="$targetDir"
   fi
 
   # copy files
@@ -660,35 +668,41 @@ doCopy() {
     updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/$bootFile"
   fi
 
-  # get label if empty
-  local srcPart=$(findmnt -no SOURCE `stat --printf "%m" "$src"`)
-  if [ -z "$targetLabel" -a -z "$(lsblk -nlo LABEL $targetDevice)" ]; then
-    targetLabel=$(lsblk -nlo LABEL "$srcPart")
-    if [ -z "$targetLabel" ]; then
-      getLabel "$mntDirTarget"
-      msg "info: using default label"
-    else
-      msg "info: using label from partition $srcPart"
+  if [ -z "$targetDir" ]; then
+    # get label if empty
+    local srcPart=$(findmnt -no SOURCE `stat --printf "%m" "$src"`)
+    if [ -z "$targetLabel" -a -z "$(lsblk -nlo LABEL $targetDevice)" ]; then
+      targetLabel=$(lsblk -nlo LABEL "$srcPart")
+      if [ -z "$targetLabel" ]; then
+        getLabel "$mntDirTarget"
+        msg "info: using default label"
+      else
+        msg "info: using label from partition $srcPart"
+      fi
+      label=1                      # force labelling
     fi
-    label=1                      # force labelling
   fi
 
   # get description if empty
-  if [ -z "$description" ]; then
+  if [ -z "$targetDir" -a -z "$description" ]; then
     readDescription
     description="${partDescription[$srcPart]}" # forces update of description
     msg "info: using description from partition $srcPart"
   fi
 
-  # umount target partitition
-  umount "$mntDirTarget" && rm -fr "$mntDirTarget"
+  if [ -z "$targetDir" ]; then
+    # umount target partitition
+    umount "$mntDirTarget" && rm -fr "$mntDirTarget"
+  fi
 
   if [ -z "$install" ]; then
     msg "info: copied system to $targetDevice"
-    if [ -z "$switch" -a -z "$switchSelect" ]; then
-      msg "info: use ${0##*/} with option '-s -t $targetDevice' to boot from new partition"
-    else
-      msg "info: reboot the system to start from $targetDevice"
+    if [ -z "$targetDir"]; then
+      if [ -z "$switch" -a -z "$switchSelect" ]; then
+        msg "info: use ${0##*/} with option '-s -t $targetDevice' to boot from new partition"
+      else
+        msg "info: reboot the system to start from $targetDevice"
+      fi
     fi
   fi
 }
