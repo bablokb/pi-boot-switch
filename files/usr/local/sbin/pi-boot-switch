@@ -564,13 +564,18 @@ doInstall() {
 # --- copy files from another partition to target partition   ----------------
 
 doCopyOther() {
-  # mount other partition if necessary
   local mntOther didMount=0
-  mntOther=$(mount | grep -w "$otherPartition" | cut -f3 -d" ")
-  if [ -z "$mntOther" ]; then
-    didMount=1
-    mntOther=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
-    mount -o ro "$otherPartition" "$mntOther"
+
+  if [ -z "$srcDir" ]; then
+    # mount other partition if necessary
+    mntOther=$(mount | grep -w "$otherPartition" | cut -f3 -d" ")
+    if [ -z "$mntOther" ]; then
+      didMount=1
+      mntOther=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
+      mount -o ro "$otherPartition" "$mntOther"
+    fi
+  else
+    mntOther="$srcDir"
   fi
 
   # check if partition is valid
@@ -691,7 +696,7 @@ doCopy() {
   fi
 
   if [ -z "$targetDir" ]; then
-    # umount target partitition
+    # umount target partition
     umount "$mntDirTarget" && rm -fr "$mntDirTarget"
   fi
 
