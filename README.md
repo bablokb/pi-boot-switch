@@ -26,6 +26,7 @@ to
 
   - copy your root-partition from the SD-card to SD-card.
   - copy your root-partition from the SD-card to the usb device.
+  - copy your root-partition from and to directories
   - copy your boot-partition from the SD-card to the usb device.
   - switch between multiple systems (a sort of bootmanager).
   - install new images directly to a target-partition.
@@ -77,8 +78,8 @@ For a short help just run
         -I             show partition info
     
         -c             copy current partition (select target with -t)
-        -t dest[=name] target partition (required for -i or -c, e.g. '-t /dev/sdc')
-        -C other       copy from another partition (select target with -t)
+        -t dest[=name] target partition/dir (required for -i or -c, e.g. '-t /dev/sdc')
+        -C other       copy from another partition/dir (select target with -t)
         -S             target partition is on a SD-card, not an usb-device
         -F             format target partition
         -k             keep existing /home on target during copy (don't use -F)
