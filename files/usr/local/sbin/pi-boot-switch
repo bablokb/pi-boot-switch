@@ -134,8 +134,10 @@ checkArguments() {
       # targetDevice is actually a directory
       targetDir="$targetDevice"
       if [ $(find "$targetDir" | grep -v "lost+found" | wc -l) -gt 1 ]; then
-        msg "error: directory $targetDir is not empty!"
-        exit 3
+        if [ -z "$format" ]; then
+          msg "error: directory $targetDir is not empty!"
+          exit 3
+        fi
       fi
       if [ -z "$copy" -a -z "$copyOther" ]; then
         msg "error: a directory-target requires options -c or -C!"
