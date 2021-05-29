@@ -159,6 +159,10 @@ checkArguments() {
       reboot=""
     else
       [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
+      if [ ! -b "$targetDevice" ]; then
+        msg "error: $targetDevice does not exist!"
+        exit 3
+      fi
     fi
 
     if [ -n "$isSD" -a -z "$targetDeviceName" ]; then
