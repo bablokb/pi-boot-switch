@@ -202,6 +202,7 @@ copyRoot() {
                  "$src" "$dst"
   # rsync destroys swap-files, so copy explicitly
   [ -f "$src/var/swap" ] && cp -a "$src/var/swap" "$dst/var/swap"
+  sync
 }
 
 # --- copy files of boot-partition   -----------------------------------------
@@ -213,6 +214,7 @@ copyBoot() {
   rsync $verbose -a --delete --inplace --no-owner --no-group --modify-window=2 \
           --exclude="pi-boot-switch.txt" --filter="P pi-boot-switch.txt" \
             "$src" "$dst"
+  sync
 }
 
 # --- query current root/boot device   ---------------------------------------
