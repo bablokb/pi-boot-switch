@@ -133,7 +133,7 @@ checkArguments() {
     if [ -d "$targetDevice" ]; then
       # targetDevice is actually a directory
       targetDir="$targetDevice"
-      if [ $(ls -1 "$targetDir" | wc -l) -gt 0 ]; then
+      if [ $(find "$targetDir" | grep -v "lost+found" | wc -l) -gt 1 ]; then
         msg "error: directory $targetDir is not empty!"
         exit 3
       fi
