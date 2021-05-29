@@ -678,7 +678,7 @@ doCopy() {
     updateCmdline "$targetDeviceName" "$mntDirTarget/_boot/$bootFile"
   fi
 
-  if [ -z "$targetDir" ]; then
+  if [ -z "$targetDir" -a -z "$srcDir" ]; then
     # get label if empty
     local srcPart=$(findmnt -no SOURCE `stat --printf "%m" "$src"`)
     if [ -z "$targetLabel" -a -z "$(lsblk -nlo LABEL $targetDevice)" ]; then
@@ -694,7 +694,7 @@ doCopy() {
   fi
 
   # get description if empty
-  if [ -z "$targetDir" -a -z "$description" ]; then
+  if [ -z "$targetDir" -a -z "$srcDir" -a -z "$description" ]; then
     readDescription
     description="${partDescription[$srcPart]}" # forces update of description
     msg "info: using description from partition $srcPart"
