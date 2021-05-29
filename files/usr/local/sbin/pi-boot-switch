@@ -119,60 +119,69 @@ parseArguments() {
 # --- check arguments   ------------------------------------------------------
 
 checkArguments() {
- if [ -n "$targetDevice" ]; then
-   if [ -d "$targetDevice" ]; then
-     if [ $(ls -1 "$targetDevice" | wc -l) -gt 0 ]; then
-       msg "error: directory $targetDevice is not empty!"
-       exit 3
-     fi
-     if [ -z "$copy" -a -z "$copyOther" ]; then
-       msg "error: a directory-target requires options -c or -C!"
-       exit 3
-     fi
-     if [ "$useUUID" -eq 1 ]; then
-       msg "error: option -U not supported for directory-targets!"
-       exit 3
-     fi
-     if ! grep -q '=' <<< "$targetDevice"; then
-       msg "error: device-name for directory-target required!"
-       exit 3
-     else
-       targetDir="${targetDevice#*=}"
-       targetDeviceName="${targetDevice%=*}"
-     fi
-     # disable unsupported options
-     label=""
-     switch=""
-     description=""
-     newBoot=""
-     reboot=""
-   fi
- else
-   [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
-   # rename feature: extract name of target-device for use in fstab + cmdline.txt
-   if grep -q '=' <<< "$targetDevice"; then
-     IFS== read targetDevice targetDeviceName <<< "$targetDevice"
-     [ "${targetDeviceName:0:4}" != "/dev" ] && \
-                                  targetDeviceName="/dev/$targetDeviceName"
-   else
-     targetDeviceName="$targetDevice"
-   fi
- fi
+  if [ -n "$targetDevice" ]; then
 
- if [ -n "$copyOther" ]; then
-   if [ -n "$copy" ]; then
-     msg "error: options -c and -C are mutually exclusive!"
-     exit 3
-   elif [ -z "$otherPartition" ]; then
-     msg "error: missing argument for option -C !"
-     exit 3
-   elif [ -d "$otherPartition" ]; then
-       srcDir="$otherPartition"
-   elif [ ! -b "$otherPartition" ]; then
-     msg "error: $otherPartition is not a valid device!"
-     exit 3
-   fi
- fi
+    # rename feature: extract name of target-device for use in fstab + cmdline.txt
+    if grep -q '=' <<< "$targetDevice"; then
+      IFS== read targetDevice targetDeviceName <<< "$targetDevice"
+      [ "${targetDeviceName:0:4}" != "/dev" ] && \
+                                   targetDeviceName="/dev/$targetDeviceName"
+    elif [ ! -d "$targetDevice" ]; then
+      targetDeviceName="$targetDevice"
+    fi
+
+    if [ -d "$targetDevice" ]; then
+      # targetDevice is actually a directory
+      targetDir="$targetDevice"
+      if [ $(ls -1 "$targetDir" | wc -l) -gt 0 ]; then
+        msg "error: directory $targetDir is not empty!"
+        exit 3
+      fi
+      if [ -z "$copy" -a -z "$copyOther" ]; then
+        msg "error: a directory-target requires options -c or -C!"
+        exit 3
+      fi
+      if [ "$useUUID" -eq 1 ]; then
+        msg "error: option -U not supported for directory-targets!"
+        exit 3
+      fi
+      if [ -n "$isSD" ]; then
+        msg "error: option -S not supported for directory-targets!"
+        exit 3
+      fi
+      # disable unsupported options
+      label=""
+      switch=""
+      description=""
+      newBoot=""
+      reboot=""
+    else
+      [ "${targetDevice:0:4}" != "/dev" ] && targetDevice="/dev/$targetDevice"
+    fi
+
+    if [ -n "$isSD" -a -z "$targetDeviceName" ]; then
+      targetDeviceName="${targetDevice/sd?/mmcblk0p}"
+    fi
+  fi
+
+  if [ -n "$copyOther" ]; then
+    if [ -n "$copy" ]; then
+      msg "error: options -c and -C are mutually exclusive!"
+      exit 3
+    elif [ -z "$otherPartition" ]; then
+      msg "error: missing argument for option -C !"
+      exit 3
+    elif [ -d "$otherPartition" ]; then
+        if [ ! -d "$otherPartition/_boot" ]; then
+          msg "error: directory $otherPartition invalid source!"
+          exit 3
+        fi
+        srcDir="$otherPartition"
+    elif [ ! -b "$otherPartition" ]; then
+      msg "error: $otherPartition is not a valid device!"
+      exit 3
+    fi
+  fi
 }
 
 # --- write message to log and stderr   --------------------------------------
@@ -652,10 +661,8 @@ doCopy() {
   # fix fstab
   if [ $useUUID -eq 1 ]; then
     updateFstab "$targetUUID" "$mntDirTarget/etc/fstab"
-  elif [ -z "$isSD" ]; then
+  elif [ -n "$targetDeviceName" ]; then
     updateFstab "$targetDeviceName" "$mntDirTarget/etc/fstab"
-  else
-    updateFstab "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/etc/fstab"
   fi
 
   # mount and copy /boot
@@ -667,10 +674,8 @@ doCopy() {
   # fix /_boot/cmdline.txt
   if [ $useUUID -eq 1 ]; then
     updateCmdline "$targetUUID" "$mntDirTarget/_boot/$bootFile"
-  elif [ -z "$isSD" ]; then
+  elif [ -n "$targetDeviceName" ]; then
     updateCmdline "$targetDeviceName" "$mntDirTarget/_boot/$bootFile"
-  else
-    updateCmdline "${targetDevice/sd?/mmcblk0p}" "$mntDirTarget/_boot/$bootFile"
   fi
 
   if [ -z "$targetDir" ]; then
@@ -702,7 +707,7 @@ doCopy() {
 
   if [ -z "$install" ]; then
     msg "info: copied system to $targetDevice"
-    if [ -z "$targetDir"]; then
+    if [ -z "$targetDir" ]; then
       if [ -z "$switch" -a -z "$switchSelect" ]; then
         msg "info: use ${0##*/} with option '-s -t $targetDevice' to boot from new partition"
       else
