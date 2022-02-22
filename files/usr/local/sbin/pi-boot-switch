@@ -818,7 +818,7 @@ else
     doInstall || exit 3
   fi
   [ -n "$switch" ]      && doSwitch
-  [ -n "$newBoot" ]     && doNewBoot
+  [ ! -z "$newBoot" ]     && doNewBoot
   [ -n "$label" ]       && doLabel
   [ -n "$description" ] && doDescription
   [ -n "$reboot" ]      && doReboot
