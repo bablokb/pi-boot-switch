@@ -831,3 +831,5 @@ else
   [ -n "$description" ] && doDescription
   [ -n "$reboot" ]      && doReboot
 fi
+
+exit 0
