@@ -119,3 +119,9 @@ Armbian uses UUIDs for referencing the root-device within `/boot/armbianEnv.txt`
 The option `-U` will keep the UUIDs, without this option newly copied
 partitions will use device names. This does no harm but is not the Armbian
 way of doing it.
+
+Extlinux.conf support
+---------------
+
+Like Armbian, most extlinux environments use UUIDs for referencing the root-device within `/boot/extlinux/extlinux.conf`.
+The option `-U` will keep the UUIDs.
