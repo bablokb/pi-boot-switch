@@ -54,6 +54,7 @@ setDefaults() {
   elif [ -f "/boot/extlinux/extlinux.conf" ]; then
     bootFile="/extlinux/extlinux.conf"
     bootParm="root"
+    bootSep="="
     useUUID=1
   else
     bootFile="cmdline.txt"
