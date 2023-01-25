@@ -44,6 +44,9 @@ setDefaults() {
   if [ -f "/etc/armbian-release" ]; then
     bootFile="armbianEnv.txt"
     bootParm="rootdev"
+  elif [ -f "/boot/extlinux/extlinux.conf" ]; then
+    bootFile="/extlinux/extlinux.conf"
+    bootParm="root"
   else
     bootFile="cmdline.txt"
     bootParm="root"
