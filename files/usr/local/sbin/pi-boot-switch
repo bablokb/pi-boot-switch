@@ -156,10 +156,6 @@ checkArguments() {
         msg "error: a directory-target requires options -c or -C!"
         exit 3
       fi
-      if [ "$useUUID" -eq 1 ]; then
-        msg "error: option -U not supported for directory-targets!"
-        exit 3
-      fi
       if [ -n "$isSD" ]; then
         msg "error: option -S not supported for directory-targets!"
         exit 3
@@ -660,7 +656,7 @@ doCopy() {
   fi
 
   # query UUID of targetDevice
-  if [ $useUUID -eq 1 ]; then
+  if [ $useUUID -eq 1 -a -z "$targetDir" ]; then
       targetUUID=$(blkid -o export -s UUID "$targetDevice" | grep "UUID")
   fi
 
@@ -680,7 +676,7 @@ doCopy() {
   copyRoot "$src" "$mntDirTarget"
 
   # fix fstab
-  if [ $useUUID -eq 1 ]; then
+  if [ $useUUID -eq 1 -a -z "$targetDir" ]; then
     updateFstab "$targetUUID" "$mntDirTarget/etc/fstab"
   elif [ -n "$targetDeviceName" ]; then
     updateFstab "$targetDeviceName" "$mntDirTarget/etc/fstab"
@@ -693,7 +689,7 @@ doCopy() {
   fi
   
   # fix /_boot/cmdline.txt
-  if [ $useUUID -eq 1 ]; then
+  if [ $useUUID -eq 1 -a -z "$targetDir" ]; then
     updateCmdline "$targetUUID" "$mntDirTarget/_boot/$bootFile"
   elif [ -n "$targetDeviceName" ]; then
     updateCmdline "$targetDeviceName" "$mntDirTarget/_boot/$bootFile"
