@@ -289,7 +289,7 @@ doInfo() {
 
   # fetch current roles of partitions
   local currentRoot=$(getCurrentDevice NAME /)
-  local currentBoot=$(getCurrentDevice NAME /boot)
+  local currentBoot=$(getCurrentDevice NAME /boot || getCurrentDevice NAME /boot/firmware)
   local nextRoot=$(getNextRootDevice)
 
   role[$currentRoot]="curr root"
