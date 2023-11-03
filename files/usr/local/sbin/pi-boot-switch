@@ -205,6 +205,23 @@ msg() {
   echo -e "$1" >&2
 }
 
+# --- query mount-point of boot partition   ----------------------------------
+
+mountBoot() {
+  if [ -d "/boot/firmware" ]; then
+    # new mountpoint
+    mp_part1="/boot/firmware"
+  else
+    mp_part1="/boot"
+  fi
+  findmnt -m "$mp_part1" > /dev/null || mount "$mp_part1"
+  if [ $? -ne 0 ]; then
+    msg "error: could not mount $mp_part1, aborting!"
+    exit 3
+  fi
+  echo "$mp_part1"
+}
+
 # --- copy files of root-partition   -----------------------------------------
 
 copyRoot() {
@@ -245,6 +262,8 @@ getCurrentDevice() {
 # --- query next root device   -----------------------------------------------
 
 getNextRootDevice() {
+  # TODO: check if this still works
+  # TODO:   yes, should work
   local nextRoot=$(sed -ne "s/.*${bootParm}${bootSep}\([^ ]*\) \?.*\$/\1/p" \
                                                             "/boot/$bootFile")
   if grep -qi UUID <<< "$nextRoot"; then
@@ -261,14 +280,23 @@ updateFstab() {
   msg "info: fixing / in /etc/fstab on $part"
   sed -i -e "/\W\/\W/s,^[^ \t]*,$part," "$fstabPath"
 
-  msg "info: fixing /boot in /etc/fstab on $part"
+  bootPath="${fstabPath%%/*}/boot/firmware"
+  if [ -d "$bootPath" ]; then
+    # new mountpoint
+    local mp_part1="/boot/firmware"
+    local me_part1="\/boot\/firmware"   # escaped version for sed below
+  else
+    local mp_part1="/boot"
+    local me_part1="\/boot"
+  fi
+  msg "info: fixing $mp_part1 in /etc/fstab on $part"
   local currentBootDevice
   if [ $useUUID -eq 1 ]; then
-    currentBootDevice="UUID=$(getCurrentDevice UUID /boot)"
+    currentBootDevice="UUID=$(getCurrentDevice UUID $mp_part1)"
   else
-    currentBootDevice=$(getCurrentDevice NAME /boot)
+    currentBootDevice=$(getCurrentDevice NAME $mp_part1)
   fi
-  sed -i -e "/\W\/boot\W/s,^[^ \t]*,$currentBootDevice," "$fstabPath"
+  sed -i -e "/\W${me_part1}\W/s,^[^ \t]*,$currentBootDevice," "$fstabPath"
 }
 
 # --- update cmdline.txt after copy   ----------------------------------------
@@ -276,7 +304,8 @@ updateFstab() {
 updateCmdline() {
   local part="$1" cmdlinePath="$2"
   msg "info: fixing $cmdlinePath"
-  sed -i -e "s,${bootParm}${bootSep}[^ ]*,${bootParm}${bootSep}$part," "$cmdlinePath"
+  sed --follow-symlinks -i \
+      -e "s,${bootParm}${bootSep}[^ ]*,${bootParm}${bootSep}$part," "$cmdlinePath"
 }
 
 # --- get default label   ----------------------------------------------------
@@ -290,12 +319,11 @@ getLabel() {
 # --- show partition information   -------------------------------------------
 
 doInfo() {
-  grep -qw "/boot" /etc/mtab || mount /boot
   declare -A role
 
   # fetch current roles of partitions
   local currentRoot=$(getCurrentDevice NAME /)
-  local currentBoot=$(getCurrentDevice NAME /boot || getCurrentDevice NAME /boot/firmware)
+  local currentBoot=$(getCurrentDevice NAME "$mp_part1")
   local nextRoot=$(getNextRootDevice)
 
   role[$currentRoot]="curr root"
@@ -393,7 +421,7 @@ doDescription() {
     device=$(getCurrentDevice NAME /)
     mkdir -p "/_boot"
     echo "$description" > "/_boot/pi-boot-switch.txt.self"
-    echo "$description" > "/boot/pi-boot-switch.txt.self"
+    echo "$description" > "$mp_part1/pi-boot-switch.txt.self"
   fi
 
   # read current description
@@ -406,16 +434,16 @@ doDescription() {
 
 readDescription() {
   declare -A -g  partDescription
-  if [ ! -f "/boot/pi-boot-switch.txt" ]; then
+  if [ ! -f "$mp_part1/pi-boot-switch.txt" ]; then
     msg "info: no partition descriptions available"
     return
   fi
 
-  msg "info: reading partition descriptions from /boot/pi-boot-switch.txt"
+  msg "info: reading partition descriptions from $mp_part1/pi-boot-switch.txt"
   local part desc
   while read part desc; do
     partDescription["${part/:}"]="$desc"
-  done < /boot/pi-boot-switch.txt
+  done < "$mp_part1/pi-boot-switch.txt"
 }
 
 # --- write partition descriptions   ------------------------------------------
@@ -427,7 +455,7 @@ writeDescription() {
   local key
   for key in "${!partDescription[@]}"; do
     echo "$key: ${partDescription[$key]}"
-  done > /boot/pi-boot-switch.txt
+  done > "$mp_part1/pi-boot-switch.txt"
 }
 
 # --- fix /etc/fstab on all root-devices   -----------------------------------
@@ -439,8 +467,14 @@ fixAllFstab() {
     local bootDevice="UUID=$uuid"
   fi
   # fix current root partition
-  msg "info: fixing /boot in /etc/fstab on current root-partition $part"
-  sed -i -e "/\W\/boot\W/s,^[^ \t]*,$bootDevice," "/etc/fstab"
+  if [ "$mp_part1" = "/boot/firmware" ]; then
+    # new mountpoint
+    me_part1="\/boot\/firmware"   # escaped version for sed below
+  else
+    me_part1="\/boot"
+  fi
+  msg "info: fixing $mp_part1 in /etc/fstab on current root-partition $part"
+  sed -i -e "/\W${me_part1}\W/s,^[^ \t]*,$bootDevice," "/etc/fstab"
 
   # create temporary mountpoint
   local tmpMnt=`mktemp -d --tmpdir pi-boot-switch.XXXXXX`
@@ -457,8 +491,16 @@ fixAllFstab() {
       continue
     fi
     if [ -d "$tmpMnt/_boot" ]; then
-      msg "info: found _boot, fixing /boot in /etc/fstab on partition $part"
-      sed -i -e "/\W\/boot\W/s,^[^ \t]*,$bootDevice," "$tmpMnt/etc/fstab"
+      if [ -d "$tmpMnt/boot/firmware" ]; then
+        # new mountpoint
+        tmp_mp_part1="/boot/firmware"
+        tmp_me_part1="\/boot\/firmware"   # escaped version for sed below
+      else
+        tmp_mp_part1="/boot"
+        tmp_me_part1="\/boot"
+      fi
+      msg "info: found _boot, fixing $tmp_mp_part1 in /etc/fstab on partition $part"
+      sed -i -e "/\W${tmp_me_part1}\W/s,^[^ \t]*,$bootDevice," "$tmpMnt/etc/fstab"
     else
       msg "info: $part is not a relevant partition"
     fi
@@ -498,16 +540,11 @@ doNewBoot() {
     exit 3
   fi
 
-  # mount and copy /boot
-  mount | grep -qw /boot || mount /boot
-  if [ $? -ne 0 ]; then
-    msg "error: could not mount /boot, aborting!"
-    exit 3
-  fi
-  copyBoot "/boot/" "$mntNewBoot"   # copy to new boot and ...
+  # mount and copy /boot or /boot/firmware
+  copyBoot "$mp_part1" "$mntNewBoot"   # copy to new boot and ...
   if [ -f "/boot/pi-boot-switch.txt" ]; then
     # ... also copy excluded pi-boot-switch.txt
-    cp -a "/boot/pi-boot-switch.txt" "$mntNewBoot"
+    cp -a "$mp_part1/pi-boot-switch.txt" "$mntNewBoot"
   fi
 
   umount "$mntNewBoot" && rm -fr "$mntNewBoot"
@@ -562,8 +599,16 @@ doInstall() {
     losetup -D "$imgFile"
     exit 3
   fi
-  msg "info: mounting ${srcDevice}p1 on $mntDirSrc/boot"
-  if ! mount "${srcDevice}p1" "$mntDirSrc/boot"; then
+
+  # TODO: change mountpoint to mp_part1
+  if [ -d "$mntDirSrc/boot/firmware" ]; then
+    # new mountpoint
+    tmp_mp_part1="boot/firmware"
+  else
+    tmp_mp_part1="boot"
+  fi
+  msg "info: mounting ${srcDevice}p1 on $mntDirSrc/$tmp_mp_part1"
+  if ! mount "${srcDevice}p1" "$mntDirSrc/$tmp_mp_part1"; then
     msg "error: could not mount ${srcDevice}p1, aborting!"
     umount "${srcDevice}p2"
     losetup -D "$imgFile"
@@ -683,9 +728,8 @@ doCopy() {
   fi
 
   # mount and copy /boot
-  if [ -z "$copyOther" ]; then
-    mount | grep -qw "${src}boot" || mount "${src}boot"
-    copyBoot "${src}boot/" "$mntDirTarget/_boot"    # copy to new root/_boot
+  if [ -n "$copy" ]; then
+    copyBoot "$mp_part1/" "$mntDirTarget/_boot"    # copy to new root/_boot
   fi
   
   # fix /_boot/cmdline.txt
@@ -743,25 +787,18 @@ doSwitch() {
   fi
   local rootDevice="$targetDevice"
 
-  # mount /boot and update /_boot
-  mount | grep -qw /boot || mount /boot
-  if [ $? -ne 0 ]; then
-    msg "error: could not mount /boot, aborting!"
-    exit 3
-  fi
-
   # check if new rootDevice is identical to current root-device
   # i.e. we are at most undoing a switch
   local currentRoot=$(getCurrentDevice NAME /)
   if [ "$currentRoot" == "$rootDevice" ]; then
     # we just have to update /boot from /_boot
-    copyBoot "/_boot/" "/boot"
+    # TODO: copy to /boot or /boot/firmware
+    copyBoot "/_boot/" "$mp_part1"
     return
   else
-    # backup /boot to current root/_boot
-    copyBoot "/boot/" "/_boot"
+    # backup /boot (or /boot/firmware) to current root/_boot
+    copyBoot "$mp_part1" "/_boot"
   fi
-
 
   # check if new root is currently mounted
   if mount | grep -qw "$rootDevice"; then
@@ -783,8 +820,8 @@ doSwitch() {
     exit 3
   fi
 
-  # copy /new/_boot -> /boot
-  copyBoot "$mntNewRoot/_boot/" "/boot"
+  # copy /new/_boot -> /boot or /boot/firmware
+  copyBoot "$mntNewRoot/_boot/" "$mp_part1"
 
   # update /home if requested
   if [ "$updateHome" = "1" ]; then
@@ -815,6 +852,7 @@ checkArguments
 
 # execute operation(s)
 
+mp_part1=$(mountBoot)
 if [ -n "$info" ]; then
   doInfo
 else
