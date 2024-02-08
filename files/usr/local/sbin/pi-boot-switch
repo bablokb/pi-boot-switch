@@ -541,7 +541,7 @@ doNewBoot() {
   fi
 
   # mount and copy /boot or /boot/firmware
-  copyBoot "$mp_part1" "$mntNewBoot"   # copy to new boot and ...
+  copyBoot "$mp_part1/" "$mntNewBoot"   # copy to new boot and ...
   if [ -f "/boot/pi-boot-switch.txt" ]; then
     # ... also copy excluded pi-boot-switch.txt
     cp -a "$mp_part1/pi-boot-switch.txt" "$mntNewBoot"
@@ -792,12 +792,11 @@ doSwitch() {
   local currentRoot=$(getCurrentDevice NAME /)
   if [ "$currentRoot" == "$rootDevice" ]; then
     # we just have to update /boot from /_boot
-    # TODO: copy to /boot or /boot/firmware
     copyBoot "/_boot/" "$mp_part1"
     return
   else
     # backup /boot (or /boot/firmware) to current root/_boot
-    copyBoot "$mp_part1" "/_boot"
+    copyBoot "$mp_part1/" "/_boot"
   fi
 
   # check if new root is currently mounted
