@@ -268,7 +268,7 @@ getNextRootDevice() {
   else
     local nextRoot=$(sed -ne "s/.*${bootParm}${bootSep}\([^ ]*\) \?.*\$/\1/p" \
                                                             "/boot/$bootFile")
-  endif
+  fi
   if grep -qi UUID <<< "$nextRoot"; then
     nextRoot=$(blkid -l -o export -t "$nextRoot" | \
                                              sed -ne "/DEVNAME/s/DEVNAME=//p")
