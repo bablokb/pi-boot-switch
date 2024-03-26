@@ -262,10 +262,13 @@ getCurrentDevice() {
 # --- query next root device   -----------------------------------------------
 
 getNextRootDevice() {
-  # TODO: check if this still works
-  # TODO:   yes, should work
-  local nextRoot=$(sed -ne "s/.*${bootParm}${bootSep}\([^ ]*\) \?.*\$/\1/p" \
+  if [ -d "/boot/firmware" ]; then
+    local nextRoot=$(sed -ne "s/.*${bootParm}${bootSep}\([^ ]*\) \?.*\$/\1/p" \
+                                                    "/boot/firmware/$bootFile")
+  else
+    local nextRoot=$(sed -ne "s/.*${bootParm}${bootSep}\([^ ]*\) \?.*\$/\1/p" \
                                                             "/boot/$bootFile")
+  endif
   if grep -qi UUID <<< "$nextRoot"; then
     nextRoot=$(blkid -l -o export -t "$nextRoot" | \
                                              sed -ne "/DEVNAME/s/DEVNAME=//p")
